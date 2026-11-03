@@ -45,6 +45,7 @@ Acesse http://localhost:3001.
 
 ```bash
 npm run lint
+npm test
 npm run build
 ```
 
@@ -62,3 +63,7 @@ para o endereço do backend.
 
 - Web: https://github.com/augustomarim/produtos-web
 - Backend: https://github.com/augustomarim/produtos-backend
+
+Os testes automatizados de sessão usam Node.js 24 e respostas simuladas.
+Verificam renovação, expiração e coordenação entre abas via Web Locks;
+não acessam o backend publicado nem substituem testes no navegador.

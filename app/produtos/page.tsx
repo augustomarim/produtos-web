@@ -1,390 +1,478 @@
 "use client";
-
 /* eslint-disable @next/next/no-img-element */
-
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-
 import type { Produto } from "../../src/types/produto";
+import { apiAutenticada } from "../../src/lib/api";
+import { limparSessao, SessaoExpiradaError } from "../../src/lib/sessao";
 import {
-  renovarSessao,
-  SessaoExpiradaError,
-} from "../../src/lib/sessao";
+  formatarData,
+  ordenarProdutos,
+  type Ordem,
+} from "../../src/lib/produtos";
+import { Icon, ProductSkeleton, Shell, Spinner } from "../../src/components/ui";
 
+type Operacao = "status" | "excluir";
 export default function ProdutosPage() {
   const router = useRouter();
-
-  const [excluindo, setExcluindo] = useState(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [aviso, setAviso] = useState("");
   const [tentativa, setTentativa] = useState(0);
   const [saindo, setSaindo] = useState(false);
-  const [alterandoStatus, setAlterandoStatus] = useState(false);
-
-  const ocupado =
-  carregando || saindo || alterandoStatus || excluindo;
+  const [pendentes, setPendentes] = useState<Record<number, Operacao>>({});
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("todos");
+  const [ordem, setOrdem] = useState<Ordem>("atualizados");
+  const mutando = Object.keys(pendentes).length > 0;
+  const navegacaoBloqueada = saindo || mutando;
 
   useEffect(() => {
     let ativo = true;
-
-    async function carregar() {
-      try {
-        const token = await renovarSessao();
-
+    const controller = new AbortController();
+    void apiAutenticada<Produto[]>("/api/produtos", {
+      signal: controller.signal,
+    })
+      .then((dados) => {
+        if (ativo) setProdutos(dados);
+      })
+      .catch((error) => {
         if (!ativo) return;
-
-        const resposta = await fetch("/api/produtos", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          cache: "no-store",
-        });
-
-        if (resposta.status === 401) {
-          throw new SessaoExpiradaError("Entre novamente.");
-        }
-
-        if (!resposta.ok) {
-          throw new Error("Não foi possível carregar os produtos.");
-        }
-
-        const dados: Produto[] = await resposta.json();
-
-        if (ativo) {
-          setProdutos(dados);
-        }
-      } catch (error) {
-        if (!ativo) return;
-
         if (error instanceof SessaoExpiradaError) {
           router.replace("/login");
           return;
         }
-
         setErro(
           error instanceof Error
             ? error.message
-            : "Erro ao carregar os produtos.",
+            : "Não foi possível carregar os produtos.",
         );
-      } finally {
-        if (ativo) {
-          setCarregando(false);
-        }
-      }
-    }
-
-    void carregar();
-
+      })
+      .finally(() => {
+        if (ativo) setCarregando(false);
+      });
     return () => {
       ativo = false;
+      controller.abort();
     };
   }, [router, tentativa]);
 
+  function falha(error: unknown) {
+    if (error instanceof SessaoExpiradaError) {
+      router.replace("/login");
+      return;
+    }
+    setErro(
+      error instanceof Error
+        ? error.message
+        : "Não foi possível concluir a operação.",
+    );
+  }
   function atualizar() {
     setErro("");
     setCarregando(true);
-    setTentativa((valor) => valor + 1);
+    setTentativa((n) => n + 1);
   }
-
   async function sair() {
     setSaindo(true);
     setErro("");
-
     try {
-      const resposta = await fetch("/api/auth/logout", {
-        method: "POST",
-      });
-
-      if (!resposta.ok) {
+      const resposta = await fetch("/api/auth/logout", { method: "POST" });
+      if (!resposta.ok)
         throw new Error("Não foi possível sair. Tente novamente.");
-      }
-
+      limparSessao();
       router.replace("/login");
     } catch (error) {
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Erro ao encerrar a sessão.",
-      );
-
+      falha(error);
       setSaindo(false);
     }
   }
-
-  async function alterarStatus(id: number) {
-    setAlterandoStatus(true);
+  async function executar(produto: Produto, operacao: Operacao) {
+    if (pendentes[produto.id] || saindo || carregando) return;
+    if (
+      operacao === "excluir" &&
+      !window.confirm(
+        `Excluir “${produto.descricao_produto}”? Essa ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    setPendentes((p) => ({ ...p, [produto.id]: operacao }));
     setErro("");
-
+    setAviso("");
     try {
-      const token = await renovarSessao();
-
-      const resposta = await fetch(`/api/produtos/${id}/status`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (resposta.status === 401) {
-        throw new SessaoExpiradaError("Entre novamente.");
-      }
-
-      const resultado = await resposta.json();
-
-      if (!resposta.ok) {
-        throw new Error(
-          resultado.error || "Não foi possível alterar o status.",
+      if (operacao === "status") {
+        const atualizado = await apiAutenticada<Produto>(
+          `/api/produtos/${produto.id}/status`,
+          { method: "PATCH" },
         );
+        setProdutos((lista) =>
+          lista.map((p) => (p.id === atualizado.id ? atualizado : p)),
+        );
+        setAviso(
+          `${atualizado.descricao_produto}: produto ${atualizado.status === "ativo" ? "ativado" : "inativado"}.`,
+        );
+      } else {
+        await apiAutenticada<void>(`/api/produtos/${produto.id}`, {
+          method: "DELETE",
+        });
+        setProdutos((lista) => lista.filter((p) => p.id !== produto.id));
+        setAviso("Produto excluído.");
       }
-
-      const atualizado: Produto = resultado;
-
-      setProdutos((lista) =>
-        lista.map((produto) =>
-          produto.id === id ? atualizado : produto,
+    } catch (error) {
+      falha(error);
+    } finally {
+      setPendentes((p) => {
+        const novo = { ...p };
+        delete novo[produto.id];
+        return novo;
+      });
+    }
+  }
+  const visiveis = useMemo(
+    () =>
+      ordenarProdutos(
+        produtos.filter(
+          (p) =>
+            (filtro === "todos" || p.status === filtro) &&
+            `${p.codigo_produto} ${p.descricao_produto}`
+              .toLocaleLowerCase("pt-BR")
+              .includes(busca.toLocaleLowerCase("pt-BR")),
         ),
-      );
-    } catch (error) {
-      if (error instanceof SessaoExpiradaError) {
-        router.replace("/login");
-        return;
-      }
+        ordem,
+      ),
+    [produtos, filtro, busca, ordem],
+  );
+  const ativos = produtos.filter((p) => p.status === "ativo").length;
+  const inicial = carregando && produtos.length === 0;
 
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Erro ao alterar o status.",
-      );
-    } finally {
-      setAlterandoStatus(false);
-    }
-  }
-
-    async function excluirProduto(produto: Produto) {
-    const confirmou = window.confirm(
-      `Excluir o produto "${produto.descricao_produto}"? Essa ação não pode ser desfeita.`,
+  function acoes(produto: Produto) {
+    const operacao = pendentes[produto.id];
+    const bloqueado = !!operacao || saindo || carregando;
+    return (
+      <div className="row-actions">
+        <Link
+          href={`/produtos/${produto.id}/editar`}
+          className="button button-quiet"
+          aria-disabled={bloqueado}
+          onClick={(e) => {
+            if (bloqueado) e.preventDefault();
+          }}
+        >
+          <Icon name="edit" />
+          Editar
+        </Link>
+        <button
+          className="button button-quiet status-action"
+          disabled={bloqueado}
+          onClick={() => void executar(produto, "status")}
+          aria-label={`${produto.status === "ativo" ? "Inativar" : "Ativar"} ${produto.descricao_produto}`}
+        >
+          {operacao === "status" ? (
+            <>
+              <Spinner />
+              Atualizando…
+            </>
+          ) : produto.status === "ativo" ? (
+            "Inativar"
+          ) : (
+            "Ativar"
+          )}
+        </button>
+        <button
+          className="button button-danger"
+          disabled={bloqueado}
+          onClick={() => void executar(produto, "excluir")}
+          aria-label={`Excluir ${produto.descricao_produto}`}
+        >
+          {operacao === "excluir" ? <Spinner /> : <Icon name="trash" />}
+          <span>{operacao === "excluir" ? "Excluindo…" : "Excluir"}</span>
+        </button>
+      </div>
     );
-
-    if (!confirmou) return;
-
-    setExcluindo(true);
-    setErro("");
-
-    try {
-      const token = await renovarSessao();
-
-      const resposta = await fetch(`/api/produtos/${produto.id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (resposta.status === 401) {
-        throw new SessaoExpiradaError("Entre novamente.");
-      }
-
-      if (resposta.status !== 204) {
-        const resultado = await resposta.json();
-
-        throw new Error(
-          resultado.error || "Não foi possível excluir o produto.",
-        );
-      }
-
-      setProdutos((lista) =>
-        lista.filter((item) => item.id !== produto.id),
-      );
-    } catch (error) {
-      if (error instanceof SessaoExpiradaError) {
-        router.replace("/login");
-        return;
-      }
-
-      setErro(
-        error instanceof Error
-          ? error.message
-          : "Erro ao excluir o produto.",
-      );
-    } finally {
-      setExcluindo(false);
-    }
   }
-
+  function imagem(p: Produto) {
+    const url = p.foto_miniatura || p.foto_produto;
+    return url ? (
+      <img
+        className="product-photo"
+        src={url}
+        alt={p.descricao_produto}
+        width={56}
+        height={56}
+        loading="lazy"
+        decoding="async"
+      />
+    ) : (
+      <span
+        className="product-photo photo-empty"
+        role="img"
+        aria-label="Produto sem foto"
+      >
+        <Icon name="image" size={24} />
+      </span>
+    );
+  }
   return (
-    <main className="min-h-screen bg-slate-100 p-6 text-slate-900">
-      <section className="mx-auto max-w-6xl">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-3xl font-bold">Produtos</h1>
-
-          <div className="flex flex-wrap gap-3">
-            {!ocupado && (
-              <Link
-                href="/produtos/novo"
-                className="rounded bg-emerald-700 px-4 py-2 text-white"
-              >
-                Novo produto
+    <Shell>
+      <div className="page-heading">
+        <div>
+          <span className="eyebrow">CATÁLOGO</span>
+          <h1>Seus produtos</h1>
+          <p className="muted">Tudo organizado. Sempre atualizado.</p>
+        </div>
+        <div className="page-actions">
+          <button
+            className="button button-secondary"
+            onClick={() => void sair()}
+            disabled={saindo || mutando || carregando}
+          >
+            {saindo ? <Spinner /> : <Icon name="logout" />}
+            {saindo ? "Saindo…" : "Sair"}
+          </button>
+          <Link
+            href="/produtos/novo"
+            className="button button-primary"
+            aria-disabled={navegacaoBloqueada}
+            onClick={(e) => {
+              if (navegacaoBloqueada) e.preventDefault();
+            }}
+          >
+            <Icon name="plus" />
+            Novo produto
+          </Link>
+        </div>
+      </div>
+      <div className="summary-grid">
+        <div className="summary-card">
+          <span>Total de produtos</span>
+          <strong>{inicial ? "—" : produtos.length}</strong>
+          <span className="summary-icon">
+            <Icon name="box" size={23} />
+          </span>
+        </div>
+        <div className="summary-card">
+          <span>Ativos</span>
+          <strong className="text-green">{inicial ? "—" : ativos}</strong>
+          <span className="summary-icon green">
+            <Icon name="check" size={23} />
+          </span>
+        </div>
+        <div className="summary-card">
+          <span>Inativos</span>
+          <strong>{inicial ? "—" : produtos.length - ativos}</strong>
+          <span className="summary-icon">
+            <Icon name="clock" size={23} />
+          </span>
+        </div>
+      </div>
+      <div className="feedback-slot">
+        {erro ? (
+          <div role="alert" className="notice notice-error">
+            {erro}
+            <button
+              className="text-button"
+              onClick={atualizar}
+              disabled={carregando || mutando}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : aviso ? (
+          <div role="status" className="notice notice-success">
+            <Icon name="check" />
+            {aviso}
+          </div>
+        ) : null}
+      </div>
+      <section className="catalog-panel" aria-label="Catálogo de produtos">
+        <div className="catalog-toolbar">
+          <div className="search-field">
+            <Icon name="search" />
+            <input
+              aria-label="Buscar produtos"
+              placeholder="Buscar por nome ou código…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+          <label className="compact-field">
+            <span>Status</span>
+            <select
+              aria-label="Filtrar por status"
+              value={filtro}
+              onChange={(e) => setFiltro(e.target.value)}
+            >
+              <option value="todos">Todos</option>
+              <option value="ativo">Ativos</option>
+              <option value="inativo">Inativos</option>
+            </select>
+          </label>
+          <label className="compact-field order-field">
+            <span>Ordenar por</span>
+            <select
+              aria-label="Ordenar por"
+              value={ordem}
+              onChange={(e) => setOrdem(e.target.value as Ordem)}
+            >
+              <option value="atualizados">Última alteração</option>
+              <option value="criados">Criação mais recente</option>
+              <option value="codigo">Código</option>
+            </select>
+          </label>
+          <button
+            className="button button-secondary refresh-button"
+            onClick={atualizar}
+            disabled={carregando || mutando || saindo}
+          >
+            {carregando ? <Spinner /> : <Icon name="refresh" />}
+            <span>Atualizar</span>
+          </button>
+        </div>
+        <div className="list-caption">
+          <span>
+            {inicial
+              ? "Preparando seu catálogo"
+              : `${visiveis.length} ${visiveis.length === 1 ? "produto" : "produtos"}`}
+          </span>
+          <span role="status">
+            {carregando && !inicial
+              ? "Atualizando lista…"
+              : ordem === "atualizados"
+                ? "Mais recentes primeiro"
+                : ""}
+          </span>
+        </div>
+        {inicial ? (
+          <ProductSkeleton />
+        ) : !visiveis.length ? (
+          <div className="empty-state">
+            <span className="empty-symbol">
+              <Icon name="box" size={34} />
+            </span>
+            <h2>
+              {produtos.length
+                ? "Nenhum produto encontrado"
+                : erro
+                  ? "Seu catálogo não carregou"
+                  : "Seu catálogo começa aqui"}
+            </h2>
+            <p>
+              {produtos.length
+                ? "Ajuste a busca ou o filtro para encontrar o que precisa."
+                : erro
+                  ? "Tente atualizar a lista novamente."
+                  : "Adicione seu primeiro produto e mantenha tudo em ordem."}
+            </p>
+            {!produtos.length && !erro && (
+              <Link href="/produtos/novo" className="button button-primary">
+                <Icon name="plus" />
+                Adicionar produto
               </Link>
             )}
-
-            <button
-              onClick={atualizar}
-              disabled={ocupado}
-              className="rounded bg-emerald-700 px-4 py-2 text-white disabled:opacity-50"
-            >
-              Atualizar
-            </button>
-
-            <button
-              onClick={sair}
-              disabled={ocupado}
-              className="rounded bg-slate-700 px-4 py-2 text-white disabled:opacity-50"
-            >
-              {saindo ? "Saindo…" : "Sair"}
-            </button>
           </div>
-        </div>
-
-        {erro && (
-          <p
-            role="alert"
-            className="mb-4 rounded bg-red-100 p-4 text-red-800"
-          >
-            {erro}
-          </p>
-        )}
-
-        {alterandoStatus && (
-          <p role="status" className="mb-4 text-slate-600">
-            Alterando status…
-          </p>
-        )}
-
-        {carregando ? (
-          <p role="status">Carregando produtos…</p>
-        ) : produtos.length === 0 ? (
-          !erro && <p>Nenhum produto cadastrado.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg bg-white shadow">
-            <table className="w-full text-left">
-              <thead className="bg-slate-200">
-                <tr>
-                  <th scope="col" className="p-4">
-                    Foto
-                  </th>
-                  <th scope="col" className="p-4">
-                    Código
-                  </th>
-                  <th scope="col" className="p-4">
-                    Descrição
-                  </th>
-                  <th scope="col" className="p-4">
-                    Status
-                  </th>
-                  <th scope="col" className="p-4">
-                    Ações
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {produtos.map((produto) => {
-                  const foto =
-                    produto.foto_miniatura || produto.foto_produto;
-
-                  return (
-                    <tr
-                      key={produto.id}
-                      className={
-                        produto.status === "ativo"
-                          ? "border-t border-slate-200 bg-emerald-50"
-                          : "border-t border-slate-200"
-                      }
-                    >
-                      <td className="p-4">
-                        {foto ? (
-                          <img
-                            src={foto}
-                            alt={produto.descricao_produto}
-                            width={64}
-                            height={64}
-                            loading="lazy"
-                            className="h-16 w-16 rounded object-cover"
-                          />
-                        ) : (
-                          <span
-                            role="img"
-                            aria-label="Produto sem foto"
-                            className="flex h-16 w-16 items-center justify-center rounded bg-slate-100 text-3xl text-slate-500"
-                          >
-                            ◇
-                          </span>
-                        )}
-                      </td>
-
-                      <td className="p-4">
-                        {produto.codigo_produto}
-                      </td>
-
-                      <td className="p-4">
-                        {produto.descricao_produto}
-                      </td>
-
-                      <td className="p-4">
-                        <span
-                          className={
-                            produto.status === "ativo"
-                              ? "rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-800"
-                              : "rounded-full bg-slate-200 px-3 py-1 text-sm font-medium text-slate-700"
-                          }
-                        >
-                          {produto.status === "ativo"
-                            ? "Ativo"
-                            : "Inativo"}
-                        </span>
-                      </td>
-
-                      <td className="p-4">
-                        <div className="flex gap-2">
-                          {!ocupado && (
-                            <Link
-                              href={`/produtos/${produto.id}/editar`}
-                              className="rounded bg-blue-700 px-3 py-2 text-sm text-white"
-                            >
-                              Editar
-                            </Link>
-                          )}
-                          <button
-                            onClick={() => alterarStatus(produto.id)}
-                            disabled={ocupado}
-                            aria-label={`${
-                              produto.status === "ativo" ? "Inativar" : "Ativar"
-                            } ${produto.descricao_produto}`}
-                            className="rounded bg-slate-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-                          >
-                            {produto.status === "ativo" ? "Inativar" : "Ativar"}
-                          </button>
-
-                          <button
-                            onClick={() => excluirProduto(produto)}
-                            disabled={ocupado}
-                            aria-label={`Excluir ${produto.descricao_produto}`}
-                            className="rounded bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-50"
-                          >
-                            Excluir
-                          </button>
+          <>
+            <div className="desktop-products">
+              <table className="products-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Produto</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Datas</th>
+                    <th scope="col" className="actions-heading">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visiveis.map((p) => (
+                    <tr key={p.id} aria-busy={!!pendentes[p.id]}>
+                      <td>
+                        <div className="product-identity">
+                          {imagem(p)}
+                          <div>
+                            <strong>{p.descricao_produto}</strong>
+                            <span className="product-code">
+                              {p.codigo_produto}
+                            </span>
+                          </div>
                         </div>
                       </td>
+                      <td>
+                        <span className={`status-badge ${p.status}`}>
+                          <span />
+                          {p.status === "ativo" ? "Ativo" : "Inativo"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="product-dates">
+                          <span>
+                            Alterado{" "}
+                            <time dateTime={p.updatedAt || undefined}>
+                              {formatarData(p.updatedAt)}
+                            </time>
+                          </span>
+                          <span>
+                            Criado{" "}
+                            <time dateTime={p.createdAt || undefined}>
+                              {formatarData(p.createdAt)}
+                            </time>
+                          </span>
+                        </div>
+                      </td>
+                      <td>{acoes(p)}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mobile-products">
+              {visiveis.map((p) => (
+                <article
+                  key={p.id}
+                  className="mobile-product"
+                  aria-busy={!!pendentes[p.id]}
+                >
+                  <div className="mobile-product-top">
+                    <div className="product-identity">
+                      {imagem(p)}
+                      <div>
+                        <strong>{p.descricao_produto}</strong>
+                        <span className="product-code">{p.codigo_produto}</span>
+                      </div>
+                    </div>
+                    <span className={`status-badge ${p.status}`}>
+                      <span />
+                      {p.status === "ativo" ? "Ativo" : "Inativo"}
+                    </span>
+                  </div>
+                  <div className="product-dates">
+                    <span>
+                      Alterado{" "}
+                      <time dateTime={p.updatedAt || undefined}>
+                        {formatarData(p.updatedAt)}
+                      </time>
+                    </span>
+                    <span>
+                      Criado{" "}
+                      <time dateTime={p.createdAt || undefined}>
+                        {formatarData(p.createdAt)}
+                      </time>
+                    </span>
+                  </div>
+                  {acoes(p)}
+                </article>
+              ))}
+            </div>
+          </>
         )}
       </section>
-    </main>
+      <p className="history-note">
+        As datas anteriores ao registro do histórico aparecem como “Não
+        registrada”. Horários no fuso do seu dispositivo.
+      </p>
+    </Shell>
   );
 }

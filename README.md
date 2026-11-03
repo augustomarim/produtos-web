@@ -1,36 +1,64 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Catálogo de Produtos — Web
 
-## Getting Started
+Aplicação web de estudo desenvolvida com Next.js, React e TypeScript.
 
-First, run the development server:
+## Funcionalidades
+
+- Cadastro e login de usuários.
+- Renovação de sessão com refresh token em cookie HttpOnly.
+- Listagem de produtos com miniaturas.
+- Criação e edição de produtos.
+- Ativação e inativação.
+- Exclusão com confirmação.
+- Envio, substituição e remoção de fotos.
+- Logout.
+
+## Requisitos
+
+- Node.js 24 LTS.
+- npm.
+- Backend em execução.
+
+## Executar localmente
+
+Instale as dependências:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm ci
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Copie `.env.example` para `.env.local` e configure:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+API_URL=https://produtos-backend-klns.onrender.com
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Inicie a aplicação:
 
-## Learn More
+```bash
+npm run dev -- --port 3001
+```
 
-To learn more about Next.js, take a look at the following resources:
+Acesse http://localhost:3001.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Verificações
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run lint
+npm run build
+```
 
-## Deploy on Vercel
+## Imagens
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Formatos aceitos: JPG, PNG e WebP.
+Tamanho máximo no web: 4 MB.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Publicação
+
+Hospedagem na Vercel, com a variável `API_URL` configurada
+para o endereço do backend.
+
+## Repositórios
+
+- Web: https://github.com/augustomarim/produtos-web
+- Backend: https://github.com/augustomarim/produtos-backend

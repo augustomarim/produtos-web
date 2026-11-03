@@ -160,9 +160,9 @@ function EditorProduto({ id }: { id: string }) {
       return;
     }
 
-    if (arquivo.size > 5 * 1024 * 1024) {
-      setErro("A foto deve ter no máximo 5 MB.");
-      return;
+    if (arquivo.size > 4 * 1024 * 1024) {
+        setErro("A foto deve ter no máximo 4 MB.");
+        return;
     }
 
     previewUrl.current = URL.createObjectURL(arquivo);

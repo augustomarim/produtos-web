@@ -47,6 +47,7 @@ function EditorProduto({ id }: { id: string }) {
 
   const [fotoAtual, setFotoAtual] = useState<string | null>(null);
   const [foto, setFoto] = useState<File | null>(null);
+  const [fotoInvalida, setFotoInvalida] = useState(false);
   const [preview, setPreview] = useState("");
 
   const [carregando, setCarregando] = useState(true);
@@ -141,6 +142,7 @@ function EditorProduto({ id }: { id: string }) {
   }
 
   function selecionarFoto(arquivo: File | null) {
+    setFotoInvalida(false);
     if (previewUrl.current) {
       URL.revokeObjectURL(previewUrl.current);
     }
@@ -156,11 +158,13 @@ function EditorProduto({ id }: { id: string }) {
     const formatos = ["image/jpeg", "image/png", "image/webp"];
 
     if (!formatos.includes(arquivo.type)) {
+      setFotoInvalida(true);
       setErro("Selecione uma foto JPG, PNG ou WebP.");
       return;
     }
 
     if (arquivo.size > 4 * 1024 * 1024) {
+      setFotoInvalida(true);
         setErro("A foto deve ter no máximo 4 MB.");
         return;
     }
@@ -229,6 +233,11 @@ function EditorProduto({ id }: { id: string }) {
 
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (fotoInvalida) {
+      setErro("Selecione uma foto JPG, PNG ou WebP de até 4 MB, ou remova a seleção inválida.");
+      return;
+    }
 
     if (ocupado) return;
 
@@ -473,6 +482,16 @@ function EditorProduto({ id }: { id: string }) {
               >
                 {aviso}
               </p>
+            )}
+
+            {fotoInvalida && (
+              <button
+                type="button"
+                onClick={() => selecionarFoto(null)}
+                className="text-sm text-red-700 underline"
+              >
+                Remover seleção inválida
+              </button>
             )}
 
             {erro && (

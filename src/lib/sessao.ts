@@ -7,11 +7,21 @@ export function renovarSessao(): Promise<string> {
     return renovacaoEmAndamento;
   }
 
-  renovacaoEmAndamento = executarRenovacao().finally(() => {
+  const renovar = () => executarRenovacao();
+
+  // As abas compartilham o cookie, mas não a Promise deste módulo.
+  // Web Locks evita que duas abas consumam o mesmo refresh token juntas.
+  const operacao: Promise<string> =
+    typeof navigator !== "undefined" && navigator.locks
+      ? Promise.resolve(navigator.locks.request("produtos:refresh", renovar))
+      : renovar();
+
+  const pendente = operacao.finally(() => {
     renovacaoEmAndamento = null;
   });
 
-  return renovacaoEmAndamento;
+  renovacaoEmAndamento = pendente;
+  return pendente;
 }
 
 async function executarRenovacao(): Promise<string> {

@@ -9,6 +9,7 @@ import { limparSessao, SessaoExpiradaError } from "../../src/lib/sessao";
 import {
   formatarData,
   ordenarProdutos,
+  filtrarProdutos,
   type Ordem,
 } from "../../src/lib/produtos";
 import { Icon, ProductSkeleton, Shell, Spinner } from "../../src/components/ui";
@@ -131,17 +132,7 @@ export default function ProdutosPage() {
     }
   }
   const visiveis = useMemo(
-    () =>
-      ordenarProdutos(
-        produtos.filter(
-          (p) =>
-            (filtro === "todos" || p.status === filtro) &&
-            `${p.codigo_produto} ${p.descricao_produto}`
-              .toLocaleLowerCase("pt-BR")
-              .includes(busca.toLocaleLowerCase("pt-BR")),
-        ),
-        ordem,
-      ),
+    () => ordenarProdutos(filtrarProdutos(produtos, busca, filtro), ordem),
     [produtos, filtro, busca, ordem],
   );
   const ativos = produtos.filter((p) => p.status === "ativo").length;
@@ -292,7 +283,7 @@ export default function ProdutosPage() {
             <Icon name="search" />
             <input
               aria-label="Buscar produtos"
-              placeholder="Buscar por nome ou código…"
+              placeholder="Buscar por nome…"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
@@ -340,7 +331,7 @@ export default function ProdutosPage() {
             {carregando && !inicial
               ? "Atualizando lista…"
               : ordem === "atualizados"
-                ? "Mais recentes primeiro"
+                ? "Ativos primeiro · Mais recentes por grupo"
                 : ""}
           </span>
         </div>

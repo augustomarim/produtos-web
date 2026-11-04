@@ -9,6 +9,7 @@ export function ordenarProdutos(
     return Number.isFinite(n) ? n : 0;
   };
   return [...produtos].sort((a, b) => {
+    if (a.status !== b.status) return a.status === "ativo" ? -1 : 1;
     if (ordem === "codigo")
       return (
         a.codigo_produto.localeCompare(b.codigo_produto, "pt-BR", {
@@ -25,4 +26,25 @@ export function formatarData(data?: string | null) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(new Date(data));
+}
+
+function normalizarNome(texto: string) {
+  return texto
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
+}
+
+export function filtrarProdutos(
+  produtos: Produto[],
+  busca: string,
+  status = "todos",
+) {
+  const termo = normalizarNome(busca);
+  return produtos.filter(
+    (p) =>
+      (status === "todos" || p.status === status) &&
+      normalizarNome(p.descricao_produto).includes(termo),
+  );
 }

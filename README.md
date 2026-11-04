@@ -73,8 +73,8 @@ não acessam o backend publicado nem substituem testes no navegador.
 
 - Botões permanecem visíveis durante as operações. Somente o produto afetado
   exibe o indicador de alteração; atualizar a lista mantém os dados atuais na tela.
-- Busca por descrição/código, filtro de status e escolha de ordenação.
-- Ordenação padrão por última alteração, com os mais recentes no topo.
+- Busca por nome desde a primeira letra (sem distinguir acentos), filtro de status e escolha de ordenação.
+- Ativos sempre antes de inativos, em todas as ordenações. Dentro de cada grupo, a ordem padrão é a última alteração mais recente.
 - Datas de criação e alteração no fuso do dispositivo. Datas antigas não
   registradas aparecem como “Não registrada”; elas não são estimadas.
 - Layout em tabela no desktop e cartões no celular.

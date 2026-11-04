@@ -149,7 +149,7 @@ async function preparar(page: Page, autenticado = true) {
   };
 }
 
-test("botões permanecem visíveis e produto alterado vai ao topo sem renovar token por ação", async ({
+test("botões permanecem visíveis e status mantém ativos acima dos inativos", async ({
   page,
 }) => {
   const mock = await preparar(page, false);
@@ -182,10 +182,18 @@ test("botões permanecem visíveis e produto alterado vai ao topo sem renovar to
     (e) => e.getBoundingClientRect().top + scrollY,
   );
   expect(durante).toBe(pos);
-  await expect(rows.first()).toContainText("Água com gás");
-  await expect(rows.first()).toContainText("Inativo");
+  await expect(rows.first()).toContainText("Café especial");
+  await expect(rows.nth(1)).toContainText("Água com gás");
+  await expect(rows.nth(1)).toContainText("Inativo");
+  await expect(rows.nth(2)).toContainText("Produto antigo");
   expect(mock.calls.refresh).toBe(0);
   expect(mock.calls.status).toBe(1);
+  await page
+    .getByRole("button", { name: "Ativar Água com gás", exact: true })
+    .click();
+  await expect(rows.first()).toContainText("Água com gás");
+  await expect(rows.first()).toContainText("Ativo");
+  expect(mock.calls.status).toBe(2);
   await page.getByLabel("Ordenar por").selectOption("criados");
   await expect(rows.first()).toContainText("Café especial");
   mock.rejeitarConsulta();
@@ -213,13 +221,11 @@ test("formulários validam fotos, criam e editam; remoção preserva o produto",
   await page
     .getByRole("textbox", { name: "Descrição *", exact: true })
     .fill("Produto novo");
-  await page
-    .getByLabel("Foto do produto", { exact: true })
-    .setInputFiles({
-      name: "grande.png",
-      mimeType: "image/png",
-      buffer: Buffer.alloc(4 * 1024 * 1024 + 1),
-    });
+  await page.getByLabel("Foto do produto", { exact: true }).setInputFiles({
+    name: "grande.png",
+    mimeType: "image/png",
+    buffer: Buffer.alloc(4 * 1024 * 1024 + 1),
+  });
   await expect(page.locator("main [role=alert]")).toContainText("4 MB");
   await page
     .getByRole("button", { name: "Criar produto", exact: true })
@@ -291,4 +297,46 @@ test("mobile sem rolagem horizontal, busca, filtros e logout", async ({
   await expect(page).toHaveURL(/\/login$/);
   await page.goto("/produtos");
   await expect(page).toHaveURL(/\/login$/);
+});
+
+test("buscar C mostra Café e Cerveja imediatamente, sem Água cujo código tem C", async ({
+  page,
+}) => {
+  await preparar(page);
+  const base = {
+    status: "ativo",
+    foto_produto: null,
+    foto_miniatura: null,
+    createdAt: null,
+    updatedAt: null,
+  };
+  await page.route("**/api/produtos", (route) =>
+    route.fulfill({
+      json: [
+        { ...base, id: 1, codigo_produto: "C-001", descricao_produto: "Água" },
+        { ...base, id: 2, codigo_produto: "P-002", descricao_produto: "Café" },
+        {
+          ...base,
+          id: 3,
+          codigo_produto: "P-003",
+          descricao_produto: "Cerveja",
+        },
+      ],
+    }),
+  );
+  await page.goto("/produtos");
+  const rows = page.locator(".products-table tbody tr");
+  await expect(rows).toHaveCount(3);
+  const busca = page.getByRole("textbox", { name: "Buscar produtos" });
+  await busca.fill("C");
+  await expect(rows).toHaveCount(2);
+  await expect(rows).toContainText(["Cerveja", "Café"]);
+  await busca.fill("CA");
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText(["Café"]);
+  await busca.fill("agua");
+  await expect(rows).toHaveCount(1);
+  await expect(rows).toContainText(["Água"]);
+  await busca.fill("");
+  await expect(rows).toHaveCount(3);
 });

@@ -113,7 +113,7 @@ async function preparar(page: Page, autenticado = true) {
         headers: { "Content-Type": req.headers()["content-type"] },
       }).formData();
       const result: Produto = p || {
-        id: 4,
+        id: Math.max(...produtos.map((item) => item.id)) + 1,
         codigo_produto: "",
         descricao_produto: "",
         status: "ativo",
@@ -339,4 +339,77 @@ test("buscar C mostra Café e Cerveja imediatamente, sem Água cujo código tem 
   await expect(rows).toContainText(["Água"]);
   await busca.fill("");
   await expect(rows).toHaveCount(3);
+});
+
+test("dois cadastros seguidos limpam campos e foto sem atualizar o navegador", async ({
+  page,
+}) => {
+  const mock = await preparar(page);
+  let liberarEnvio!: () => void;
+  const envioPendente = new Promise<void>((resolve) => {
+    liberarEnvio = resolve;
+  });
+  await page.route("**/api/produtos", async (route) => {
+    if (route.request().method() === "POST") await envioPendente;
+    await route.fallback();
+  });
+  await page.goto("/produtos");
+  await page.getByRole("link", { name: "Novo produto", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Código *", exact: true })
+    .fill("NOVO-01");
+  await page
+    .getByRole("textbox", { name: "Descrição *", exact: true })
+    .fill("Primeiro cadastro");
+  await page
+    .getByLabel("Foto do produto", { exact: true })
+    .setInputFiles({
+      name: "foto.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aNEkAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  await page
+    .getByRole("button", { name: "Criar produto", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Salvando…", exact: true }),
+  ).toBeDisabled();
+  liberarEnvio();
+  await expect(page).toHaveURL(/\/produtos$/);
+  await expect(page.locator(".products-table tbody")).toContainText(
+    "Primeiro cadastro",
+  );
+  await page.getByRole("link", { name: "Novo produto", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Código *", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("textbox", { name: "Código *", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("textbox", { name: "Descrição *", exact: true }),
+  ).toHaveValue("");
+  await expect(
+    page.getByRole("img", { name: "Pré-visualização da nova foto" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Criar produto", exact: true }),
+  ).toBeEnabled();
+  await page
+    .getByRole("textbox", { name: "Código *", exact: true })
+    .fill("NOVO-02");
+  await page
+    .getByRole("textbox", { name: "Descrição *", exact: true })
+    .fill("Segundo cadastro");
+  await page
+    .getByRole("button", { name: "Criar produto", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/produtos$/);
+  await expect(page.locator(".products-table tbody")).toContainText(
+    "Segundo cadastro",
+  );
+  expect(mock.calls.create).toBe(2);
 });

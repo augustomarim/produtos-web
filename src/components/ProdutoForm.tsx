@@ -1,6 +1,12 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Produto } from "../types/produto";
@@ -11,6 +17,7 @@ import { Icon, Shell, Spinner } from "./ui";
 
 export default function ProdutoForm({ id }: { id?: string }) {
   const router = useRouter();
+  const [navegando, iniciarNavegacao] = useTransition();
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
   const [status, setStatus] = useState<"ativo" | "inativo">("ativo");
@@ -25,7 +32,7 @@ export default function ProdutoForm({ id }: { id?: string }) {
   const [erro, setErro] = useState("");
   const [aviso, setAviso] = useState("");
   const previewUrl = useRef("");
-  const ocupado = operacao !== null;
+  const ocupado = operacao !== null || navegando;
 
   useEffect(() => {
     let ativo = true;
@@ -103,6 +110,13 @@ export default function ProdutoForm({ id }: { id?: string }) {
         : "Não foi possível concluir a operação.",
     );
   }
+  function limparCadastro() {
+    setCodigo("");
+    setDescricao("");
+    setStatus("ativo");
+    setProduto(null);
+    selecionarFoto(null);
+  }
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (ocupado) return;
@@ -123,11 +137,19 @@ export default function ProdutoForm({ id }: { id?: string }) {
       form.set("descricao_produto", descricao.trim());
       if (id) form.set("status", status);
       if (foto) form.set("foto_produto", foto);
-      await apiAutenticada<Produto>(
+      const salvo = await apiAutenticada<Produto>(
         id ? `/api/produtos/${id}` : "/api/produtos",
         { method: id ? "PUT" : "POST", body: form },
       );
-      router.replace("/produtos");
+      // Next.js preserves this page when navigating. Leave a fresh, unlocked
+      // form for the next visit, while the transition keeps this one disabled.
+      if (!id) limparCadastro();
+      else {
+        setProduto(salvo);
+        selecionarFoto(null);
+      }
+      setOperacao(null);
+      iniciarNavegacao(() => router.replace("/produtos"));
     } catch (error) {
       falha(error);
       setOperacao(null);
@@ -400,8 +422,12 @@ export default function ProdutoForm({ id }: { id?: string }) {
                   disabled={ocupado}
                   type="submit"
                 >
-                  {operacao === "salvar" ? <Spinner /> : <Icon name="check" />}
-                  {operacao === "salvar"
+                  {operacao === "salvar" || navegando ? (
+                    <Spinner />
+                  ) : (
+                    <Icon name="check" />
+                  )}
+                  {operacao === "salvar" || navegando
                     ? "Salvando…"
                     : id
                       ? "Salvar alterações"

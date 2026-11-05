@@ -15,7 +15,7 @@ test("botões permanecem visíveis e status mantém ativos acima dos inativos", 
   const rows = page.locator(".products-table tbody tr");
   await expect(rows).toHaveCount(3);
   await expect(rows.first()).toContainText("Café especial");
-  expect(mock.calls.refresh).toBe(0);
+  expect(mock.calls.refresh).toBe(1);
   const novo = page.getByRole("link", { name: "Novo produto", exact: true });
   const pos = await novo.evaluate(
     (e) => e.getBoundingClientRect().top + scrollY,
@@ -38,7 +38,7 @@ test("botões permanecem visíveis e status mantém ativos acima dos inativos", 
   await expect(rows.nth(1)).toContainText("Água com gás");
   await expect(rows.nth(1)).toContainText("Inativo");
   await expect(rows.nth(2)).toContainText("Produto antigo");
-  expect(mock.calls.refresh).toBe(0);
+  expect(mock.calls.refresh).toBe(1);
   expect(mock.calls.status).toBe(1);
   await page
     .getByRole("button", { name: "Ativar Água com gás", exact: true })
@@ -57,7 +57,7 @@ test("botões permanecem visíveis e status mantém ativos acima dos inativos", 
   await expect(
     page.getByRole("button", { name: "Atualizar", exact: true }),
   ).toBeEnabled();
-  expect(mock.calls.refresh).toBe(1);
+  expect(mock.calls.refresh).toBe(2);
   await page.screenshot({
     path: test.info().outputPath("desktop.png"),
     fullPage: true,

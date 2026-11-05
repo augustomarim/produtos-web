@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SlowFeedback } from "./Experience";
 import { useFeedback } from "./Feedback";
-import { guardarAccessToken } from "../lib/sessao";
+import { limparPreferenciasCatalogo } from "../lib/catalogo";
+import {
+  guardarAccessToken,
+  limparSessao,
+  avisarMudancaSessao,
+  comBloqueioSessao,
+} from "../lib/sessao";
 import { Header, Icon, Spinner } from "./ui";
 export default function AuthForm({ cadastro = false }: { cadastro?: boolean }) {
   const router = useRouter();
@@ -62,13 +68,12 @@ export default function AuthForm({ cadastro = false }: { cadastro?: boolean }) {
     setCarregando(true);
     setErro("");
     try {
-      const resposta = await fetch(
-        cadastro ? "/api/auth/register" : "/api/auth/login",
-        {
+      const resposta = await comBloqueioSessao(() =>
+        fetch(cadastro ? "/api/auth/register" : "/api/auth/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nome, email, senha }),
-        },
+        }),
       );
       const dados = await resposta.json();
       if (!resposta.ok) {
@@ -95,11 +100,16 @@ export default function AuthForm({ cadastro = false }: { cadastro?: boolean }) {
       if (!cadastro) {
         if (typeof dados.token !== "string")
           throw new Error("Resposta de autenticação inválida.");
+        limparSessao();
+        limparPreferenciasCatalogo();
         guardarAccessToken(dados.token);
+        avisarMudancaSessao();
+        window.location.replace("/produtos");
+        return;
       }
       if (cadastro)
         notify("Conta criada com sucesso. Entre com seu email e senha.");
-      router.replace(cadastro ? "/login" : "/produtos");
+      router.replace("/login");
     } catch (error) {
       setErro(
         error instanceof Error

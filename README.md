@@ -181,3 +181,30 @@ Não há migração nova nesta alteração.
 Estas melhorias alteram somente o web. Nenhuma migração ou atualização
 adicional do backend é necessária. Testes de navegador usam dados locais
 simulados; não criam nem excluem produtos no serviço publicado.
+
+## Catálogo exclusivo por usuário
+
+Cada conta acessa somente seus próprios produtos. Busca, contagens, filtros,
+fotos e ações em lote usam o mesmo escopo no backend; informar um ID ou
+`usuarioId` pelo navegador não concede acesso a outra conta. Um código pode
+existir em contas diferentes, mas continua único dentro de cada conta.
+
+Login e logout fazem navegação completa para descartar telas, formulários,
+seleções e fotos mantidos em memória pelo Next.js. As preferências são limpas.
+Requisições antigas são rejeitadas após mudar a sessão; uma renovação que
+retorne identidade diferente exige nova entrada. Login/logout compartilham
+com o refresh o Web Lock da origem para evitar disputas pelo cookie.
+Mudanças de sessão são sinalizadas às outras abas com um identificador
+aleatório no localStorage (sem token ou dados pessoais). As outras abas
+ocultam o conteúdo e retornam ao login; páginas restauradas do cache de
+histórico também exigem nova entrada.
+
+Publique esta versão somente depois do backend com a migração
+`20261105180000_produtos_por_usuario`. Essa migração apaga os produtos
+antigos sem autoria, preservando usuários e sessões. Consulte o README do
+backend para a ordem de implantação em manutenção. Não aplique reset no banco.
+
+As fotos continuam usando URLs públicas do Cloudinary. O isolamento impede
+obter/alterar fotos alheias pela API, mas não torna privada uma URL de imagem
+que alguém já conheça. A migração limpa os registros órfãos do banco;
+não apaga automaticamente arquivos antigos do Cloudinary.

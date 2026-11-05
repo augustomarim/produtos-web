@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import SessionSync from "../src/components/SessionSync";
 import { FeedbackProvider } from "../src/components/Feedback";
 export const metadata: Metadata = {
   title: "Produtos | Seu catálogo organizado",
@@ -13,6 +14,7 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body>
+        <SessionSync />
         <FeedbackProvider>{children}</FeedbackProvider>
       </body>
     </html>

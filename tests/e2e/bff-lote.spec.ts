@@ -63,3 +63,20 @@ test("BFF rejeita sem token e JSON malformado e preserva validação do backend"
     ).status(),
   ).toBe(400);
 });
+
+test("BFF preserva paginação, busca, filtro e ordenação sem encaminhar parâmetros desconhecidos", async ({
+  request,
+}) => {
+  const resposta = await request.get(
+    "/api/produtos?pagina=2&limite=10&busca=caf%C3%A9&status=ativo&ordem=criados&ignorar=1",
+    { headers: { Authorization: "Bearer bff-test-only" } },
+  );
+  expect(resposta.status()).toBe(200);
+  expect((await resposta.json()).consulta).toEqual({
+    pagina: "2",
+    limite: "10",
+    busca: "café",
+    status: "ativo",
+    ordem: "criados",
+  });
+});

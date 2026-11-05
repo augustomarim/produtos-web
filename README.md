@@ -111,11 +111,11 @@ Para usar um Chromium já instalado, defina opcionalmente
 - Cabeçalho indeterminado quando apenas parte da lista está selecionada.
 - Buscar ou mudar o filtro remove da seleção os produtos que ficaram ocultos;
   limpar a busca não restaura seleções escondidas.
-- Até 100 produtos por ação. Se houver mais de 100 visíveis, refine o filtro
-  ou marque individualmente, respeitando o limite.
+- Até 100 produtos por ação; selecionar todos afeta somente a página atual.
 - A barra permite Ativar, Inativar, Excluir e Limpar seleção. Ativar/inativar
   define o estado desejado; nunca usa o toggle individual para um lote.
-- Excluir exige confirmação com a quantidade. Durante a requisição, seleção
+- Excluir exige confirmação com quantidade, cinco primeiros nomes/códigos e
+  a quantidade restante. Durante a requisição, seleção
   e ações conflitantes ficam desabilitadas, sem esconder botões da página.
 - Sucesso atualiza os registros retornados e limpa a seleção. Uma falha mantém
   a seleção para revisão; uma resposta com menos afetados informa a contagem
@@ -129,3 +129,23 @@ de publicar esta interface. Não é necessária uma migração nova.
 
 Os testes de navegador também iniciam um backend falso local na porta 3511
 para verificar o BFF. Não alteram o Render nem o Neon.
+
+## Paginação e ações inteligentes
+
+- A barra informa quantos selecionados estão ativos e inativos. Ativar fica
+  desabilitado quando todos já estão ativos; Inativar segue a mesma regra.
+  Seleções mistas enviam somente IDs que precisam mudar, preservando as datas
+  dos demais. O backend também aplica essa proteção.
+- Paginação real no servidor, com 10, 25, 50 ou 100 produtos por página. Busca
+  e ordenação abrangem todo o catálogo. A API recebe os critérios pelo BFF;
+  nenhum termo é usado como SQL livre.
+- Busca, filtro, ordem, tamanho e página são preservados no sessionStorage da
+  aba ao editar ou recarregar. O logout limpa essas preferências. Seleções
+  não são persistidas e são limpas ao mudar de página ou ordenação.
+- A busca tem espera de 200 ms e cancela consultas antigas. As contagens
+  superiores representam o catálogo completo, não apenas a página visível.
+
+Integre primeiro o backend com consulta paginada e status inteligente e depois
+o web. Durante a atualização, o web aceita o array legado e pagina localmente;
+a paginação no servidor passa a valer quando o backend é atualizado.
+Não há migração nova nesta alteração.

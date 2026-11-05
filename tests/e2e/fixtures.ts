@@ -3,9 +3,13 @@ import type { Produto } from "../../src/types/produto";
 const token = () =>
   `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 900 })).toString("base64url")}.signature`;
 const imagem = "/fixture-product.svg";
-export async function preparar(page: Page, autenticado = true) {
+export async function preparar(
+  page: Page,
+  autenticado = true,
+  iniciais?: Produto[],
+) {
   let loggedIn = autenticado;
-  let produtos: Produto[] = [
+  let produtos: Produto[] = iniciais || [
     {
       id: 1,
       codigo_produto: "AG-001",
@@ -45,6 +49,7 @@ export async function preparar(page: Page, autenticado = true) {
     bulk: 0,
     bulkDelete: 0,
   };
+  const consultas: URLSearchParams[] = [];
   let ultimoLote: { ids: number[]; status?: string } | null = null;
   let falharLote = false;
   let desaparecerId: number | null = null;
@@ -91,6 +96,54 @@ export async function preparar(page: Page, autenticado = true) {
         });
       }
       await new Promise((resolve) => setTimeout(resolve, 150));
+      const q = new URL(req.url()).searchParams;
+      consultas.push(q);
+      if (q.has("pagina")) {
+        const normal = (s: string) =>
+          s
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
+        const filtro = q.get("status") || "todos",
+          busca = normal(q.get("busca") || "");
+        const filtrados = produtos.filter(
+          (p) =>
+            (filtro === "todos" || p.status === filtro) &&
+            normal(p.descricao_produto).includes(busca),
+        );
+        const ordem = q.get("ordem") || "atualizados";
+        filtrados.sort((a, b) => {
+          if (a.status !== b.status) return a.status === "ativo" ? -1 : 1;
+          if (ordem === "codigo")
+            return (
+              a.codigo_produto.localeCompare(b.codigo_produto) || b.id - a.id
+            );
+          const campo = ordem === "criados" ? "createdAt" : "updatedAt";
+          return (
+            (Date.parse(b[campo] || "") || 0) -
+              (Date.parse(a[campo] || "") || 0) || b.id - a.id
+          );
+        });
+        const limite = Number(q.get("limite")) || 25,
+          paginas = Math.max(1, Math.ceil(filtrados.length / limite)),
+          pagina = Math.min(Number(q.get("pagina")) || 1, paginas);
+        const ativos = produtos.filter((p) => p.status === "ativo").length;
+        return route.fulfill({
+          json: {
+            produtos: filtrados.slice((pagina - 1) * limite, pagina * limite),
+            total: filtrados.length,
+            pagina,
+            paginas,
+            limite,
+            resumo: {
+              total: produtos.length,
+              ativos,
+              inativos: produtos.length - ativos,
+            },
+          },
+        });
+      }
       return route.fulfill({ json: produtos });
     }
     if (
@@ -202,6 +255,7 @@ export async function preparar(page: Page, autenticado = true) {
   });
   return {
     calls,
+    consultas: () => consultas,
     ultimoLote: () => ultimoLote,
     falharProximoLote: () => {
       falharLote = true;

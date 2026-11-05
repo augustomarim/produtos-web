@@ -1055,3 +1055,53 @@ textarea.form-input {
     min-width: 24px;
   }
 }
+
+.selection-counts {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.pagination-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 24px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.pagination-bar label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pagination-bar select {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  color: var(--ink);
+}
+.pagination-bar nav {
+  display: flex;
+  gap: 8px;
+}
+@media (max-width: 560px) {
+  .pagination-bar {
+    padding: 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .pagination-bar nav {
+    width: 100%;
+  }
+  .pagination-bar nav .button {
+    flex: 1;
+  }
+  .bulk-actions {
+    gap: 9px;
+  }
+}

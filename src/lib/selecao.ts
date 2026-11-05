@@ -28,3 +28,23 @@ export function selecionarVisiveis(visiveis: Produto[], marcar: boolean) {
     );
   return ids;
 }
+
+export function planejarStatus(
+  produtos: Produto[],
+  ids: ReadonlySet<number>,
+  status: "ativo" | "inativo",
+) {
+  const selecionados = produtos.filter((p) => ids.has(p.id));
+  return {
+    ids: selecionados.filter((p) => p.status !== status).map((p) => p.id),
+    jaNoStatus: selecionados.filter((p) => p.status === status).length,
+  };
+}
+export function confirmarExclusao(produtos: Produto[]) {
+  const nomes = produtos
+    .slice(0, 5)
+    .map((p) => `• ${p.descricao_produto} (${p.codigo_produto})`)
+    .join("\n");
+  const restantes = produtos.length - 5;
+  return `Excluir ${produtos.length} ${produtos.length === 1 ? "produto selecionado" : "produtos selecionados"}?\n\n${nomes}${restantes > 0 ? `\n… e mais ${restantes} ${restantes === 1 ? "produto" : "produtos"}.` : ""}\n\nAs fotos associadas também serão removidas. Essa ação não pode ser desfeita.`;
+}

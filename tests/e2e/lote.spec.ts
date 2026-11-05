@@ -82,7 +82,7 @@ test("status explícito em seleção mista usa uma chamada e limpa seleção", a
   ).toHaveCount(0);
   expect(mock.calls.bulk).toBe(1);
   expect(mock.calls.status).toBe(0);
-  expect(mock.ultimoLote()).toEqual({ ids: [2, 3], status: "inativo" });
+  expect(mock.ultimoLote()).toEqual({ ids: [2], status: "inativo" });
   const rows = page.locator(".products-table tbody tr");
   await expect(rows.filter({ hasText: "Café especial" })).toContainText(
     "Inativo",
@@ -182,31 +182,42 @@ test("mobile mantém seleção e ações em lote sem overflow", async ({ page })
   );
 });
 
-test("selecionar todos não ultrapassa 100 nem envia ação silenciosamente", async ({
+test("selecionar todos marca apenas a página atual, até 100", async ({
   page,
 }) => {
-  await preparar(page);
-  await page.route("**/api/produtos", (route) =>
-    route.fulfill({
-      json: Array.from({ length: 101 }, (_, i) => ({
-        id: i + 1,
-        codigo_produto: `L-${i}`,
-        descricao_produto: `Produto ${i}`,
-        status: "ativo",
-        foto_produto: null,
-        foto_miniatura: null,
-      })),
-    }),
-  );
+  const dados = Array.from({ length: 101 }, (_, i) => ({
+    id: i + 1,
+    codigo_produto: `L-${i}`,
+    descricao_produto: `Produto ${i}`,
+    status: "ativo" as const,
+    foto_produto: null,
+    foto_miniatura: null,
+  }));
+  await preparar(page, true, dados);
   await page.goto("/produtos");
   const todos = page.getByRole("checkbox", {
     name: "Selecionar todos os produtos visíveis",
     exact: true,
   });
-  await todos.click();
-  await expect(page.locator("main [role=alert]")).toContainText("mais de 100");
-  await expect(todos).not.toBeChecked();
+  await todos.check();
   await expect(
     page.getByRole("region", { name: "Ações dos produtos selecionados" }),
-  ).toHaveCount(0);
+  ).toContainText("25 selecionados");
+  await expect(page.locator(".products-table tbody tr")).toHaveCount(25);
+  await page
+    .getByRole("button", { name: "Limpar seleção", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "Produtos por página" })
+    .selectOption("100");
+  await todos.check();
+  await expect(
+    page.getByRole("region", { name: "Ações dos produtos selecionados" }),
+  ).toContainText("100 selecionados");
+  await page
+    .getByRole("button", { name: "Limpar seleção", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Próxima", exact: true }).click();
+  await expect(page.locator(".products-table tbody tr")).toHaveCount(1);
+  await expect(todos).not.toBeChecked();
 });

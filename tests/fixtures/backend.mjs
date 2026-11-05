@@ -11,6 +11,21 @@ const server = createServer(async (req, res) => {
     res.end('{"error":"Sem token"}');
     return;
   }
+  const url = new URL(req.url, "http://127.0.0.1:3511");
+  if (req.method === "GET" && url.pathname === "/produtos") {
+    res.end(
+      JSON.stringify({
+        produtos: [],
+        total: 0,
+        pagina: 1,
+        paginas: 1,
+        limite: 25,
+        resumo: { total: 0, ativos: 0, inativos: 0 },
+        consulta: Object.fromEntries(url.searchParams),
+      }),
+    );
+    return;
+  }
   let data;
   try {
     let body = "";

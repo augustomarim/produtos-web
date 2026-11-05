@@ -20,7 +20,12 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const resposta = await fetch(`${apiUrl}/produtos`, {
+    const destino = new URL(`${apiUrl.replace(/\/$/, "")}/produtos`);
+    for (const [chave, valor] of request.nextUrl.searchParams) {
+      if (["pagina", "limite", "busca", "status", "ordem"].includes(chave))
+        destino.searchParams.append(chave, valor);
+    }
+    const resposta = await fetch(destino, {
       headers: {
         Authorization: authorization,
       },

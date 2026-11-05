@@ -154,28 +154,32 @@ test("mobile sem rolagem horizontal, busca, filtros e logout", async ({
 test("buscar C mostra Café e Cerveja imediatamente, sem Água cujo código tem C", async ({
   page,
 }) => {
-  await preparar(page);
-  const base = {
-    status: "ativo",
-    foto_produto: null,
-    foto_miniatura: null,
-    createdAt: null,
-    updatedAt: null,
-  };
-  await page.route("**/api/produtos", (route) =>
-    route.fulfill({
-      json: [
-        { ...base, id: 1, codigo_produto: "C-001", descricao_produto: "Água" },
-        { ...base, id: 2, codigo_produto: "P-002", descricao_produto: "Café" },
-        {
-          ...base,
-          id: 3,
-          codigo_produto: "P-003",
-          descricao_produto: "Cerveja",
-        },
-      ],
-    }),
-  );
+  await preparar(page, true, [
+    {
+      id: 1,
+      codigo_produto: "C-001",
+      descricao_produto: "Água",
+      status: "ativo",
+      foto_produto: null,
+      foto_miniatura: null,
+    },
+    {
+      id: 2,
+      codigo_produto: "P-002",
+      descricao_produto: "Café",
+      status: "ativo",
+      foto_produto: null,
+      foto_miniatura: null,
+    },
+    {
+      id: 3,
+      codigo_produto: "P-003",
+      descricao_produto: "Cerveja",
+      status: "ativo",
+      foto_produto: null,
+      foto_miniatura: null,
+    },
+  ]);
   await page.goto("/produtos");
   const rows = page.locator(".products-table tbody tr");
   await expect(rows).toHaveCount(3);
@@ -201,7 +205,7 @@ test("dois cadastros seguidos limpam campos e foto sem atualizar o navegador", a
   const envioPendente = new Promise<void>((resolve) => {
     liberarEnvio = resolve;
   });
-  await page.route("**/api/produtos", async (route) => {
+  await page.route(/\/api\/produtos(?:\?.*)?$/, async (route) => {
     if (route.request().method() === "POST") await envioPendente;
     await route.fallback();
   });
@@ -213,16 +217,14 @@ test("dois cadastros seguidos limpam campos e foto sem atualizar o navegador", a
   await page
     .getByRole("textbox", { name: "Descrição *", exact: true })
     .fill("Primeiro cadastro");
-  await page
-    .getByLabel("Foto do produto", { exact: true })
-    .setInputFiles({
-      name: "foto.png",
-      mimeType: "image/png",
-      buffer: Buffer.from(
-        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aNEkAAAAASUVORK5CYII=",
-        "base64",
-      ),
-    });
+  await page.getByLabel("Foto do produto", { exact: true }).setInputFiles({
+    name: "foto.png",
+    mimeType: "image/png",
+    buffer: Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aNEkAAAAASUVORK5CYII=",
+      "base64",
+    ),
+  });
   await page
     .getByRole("button", { name: "Criar produto", exact: true })
     .click();

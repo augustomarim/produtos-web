@@ -8,7 +8,6 @@ import { apiAutenticada } from "../../src/lib/api";
 import { limparSessao, SessaoExpiradaError } from "../../src/lib/sessao";
 import {
   formatarData,
-  ordenarProdutos,
   filtrarProdutos,
   type Ordem,
 } from "../../src/lib/produtos";
@@ -19,10 +18,25 @@ import {
   restringirSelecao,
   selecionarProduto,
   selecionarVisiveis,
+  planejarStatus,
+  confirmarExclusao,
 } from "../../src/lib/selecao";
+
+import {
+  PADRAO_CATALOGO,
+  lerPreferenciasCatalogo,
+  salvarPreferenciasCatalogo,
+  limparPreferenciasCatalogo,
+  queryCatalogo,
+  adaptarPagina,
+  type PreferenciasCatalogo,
+  type PaginaProdutos,
+} from "../../src/lib/catalogo";
 
 type ResultadoLote = {
   solicitados: number;
+  jaNoStatus?: number;
+  naoEncontrados?: number;
   afetados: number;
   produtos?: Produto[];
   idsExcluidos?: number[];
@@ -43,44 +57,90 @@ export default function ProdutosPage() {
   const [tentativa, setTentativa] = useState(0);
   const [saindo, setSaindo] = useState(false);
   const [pendentes, setPendentes] = useState<Record<number, Operacao>>({});
-  const [busca, setBusca] = useState("");
-  const [filtro, setFiltro] = useState("todos");
-  const [ordem, setOrdem] = useState<Ordem>("atualizados");
+  const [preferencias, setPreferencias] = useState<PreferenciasCatalogo>({
+    ...PADRAO_CATALOGO,
+  });
+  const [preferenciasProntas, setPreferenciasProntas] = useState(false);
+  const [paginaDados, setPaginaDados] = useState<PaginaProdutos>({
+    produtos: [],
+    total: 0,
+    pagina: 1,
+    paginas: 1,
+    limite: 25,
+    resumo: { total: 0, ativos: 0, inativos: 0 },
+  });
+  const { busca, filtro, ordem, pagina, limite } = preferencias;
   const mutando = Object.keys(pendentes).length > 0 || lote !== null;
   const navegacaoBloqueada = saindo || mutando;
 
   useEffect(() => {
     let ativo = true;
-    const controller = new AbortController();
-    void apiAutenticada<Produto[]>("/api/produtos", {
-      signal: controller.signal,
-    })
-      .then((dados) => {
-        if (ativo) {
-          setProdutos(dados);
-          setSelecionados((ids) => restringirSelecao(ids, dados));
-        }
-      })
-      .catch((error) => {
-        if (!ativo) return;
-        if (error instanceof SessaoExpiradaError) {
-          router.replace("/login");
-          return;
-        }
-        setErro(
-          error instanceof Error
-            ? error.message
-            : "Não foi possível carregar os produtos.",
-        );
-      })
-      .finally(() => {
-        if (ativo) setCarregando(false);
-      });
+    void Promise.resolve().then(() => {
+      if (ativo) {
+        setPreferencias(lerPreferenciasCatalogo());
+        setSelecionados(new Set());
+        setCarregando(true);
+        setPreferenciasProntas(true);
+      }
+    });
     return () => {
       ativo = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!preferenciasProntas) return;
+    let ativo = true;
+    const controller = new AbortController();
+    const consulta = { busca, filtro, ordem, pagina, limite };
+    const timer = setTimeout(() => {
+      setCarregando(true);
+      void apiAutenticada<PaginaProdutos | Produto[]>(
+        `/api/produtos?${queryCatalogo(consulta)}`,
+        { signal: controller.signal },
+      )
+        .then((resposta) => {
+          if (!ativo) return;
+          const dados = adaptarPagina(resposta, consulta);
+          setPaginaDados(dados);
+          setProdutos(dados.produtos);
+          setSelecionados((ids) => restringirSelecao(ids, dados.produtos));
+          if (dados.pagina !== consulta.pagina) {
+            const nova = { ...consulta, pagina: dados.pagina };
+            salvarPreferenciasCatalogo(nova);
+            setPreferencias(nova);
+          }
+        })
+        .catch((error) => {
+          if (!ativo) return;
+          if (error instanceof SessaoExpiradaError) {
+            router.replace("/login");
+            return;
+          }
+          setErro(
+            error instanceof Error
+              ? error.message
+              : "Não foi possível carregar os produtos.",
+          );
+        })
+        .finally(() => {
+          if (ativo) setCarregando(false);
+        });
+    }, 200);
+    return () => {
+      ativo = false;
+      clearTimeout(timer);
       controller.abort();
     };
-  }, [router, tentativa]);
+  }, [
+    router,
+    tentativa,
+    preferenciasProntas,
+    busca,
+    filtro,
+    ordem,
+    pagina,
+    limite,
+  ]);
 
   function falha(error: unknown) {
     if (error instanceof SessaoExpiradaError) {
@@ -106,6 +166,8 @@ export default function ProdutosPage() {
       if (!resposta.ok)
         throw new Error("Não foi possível sair. Tente novamente.");
       limparSessao();
+      limparPreferenciasCatalogo();
+      setSelecionados(new Set());
       router.replace("/login");
     } catch (error) {
       falha(error);
@@ -114,12 +176,7 @@ export default function ProdutosPage() {
   }
   async function executar(produto: Produto, operacao: Operacao) {
     if (pendentes[produto.id] || saindo || carregando || lote !== null) return;
-    if (
-      operacao === "excluir" &&
-      !window.confirm(
-        `Excluir “${produto.descricao_produto}”? Essa ação não pode ser desfeita.`,
-      )
-    )
+    if (operacao === "excluir" && !window.confirm(confirmarExclusao([produto])))
       return;
     setPendentes((p) => ({ ...p, [produto.id]: operacao }));
     setAvisoAtencao(false);
@@ -144,6 +201,8 @@ export default function ProdutosPage() {
         setProdutos((lista) => lista.filter((p) => p.id !== produto.id));
         setAviso("Produto excluído.");
       }
+      setCarregando(true);
+      setTentativa((n) => n + 1);
     } catch (error) {
       falha(error);
     } finally {
@@ -156,20 +215,46 @@ export default function ProdutosPage() {
     }
   }
   const visiveis = useMemo(
-    () => ordenarProdutos(filtrarProdutos(produtos, busca, filtro), ordem),
-    [produtos, filtro, busca, ordem],
+    () =>
+      filtrarProdutos(produtos, busca, filtro).sort((a, b) =>
+        a.status === b.status ? 0 : a.status === "ativo" ? -1 : 1,
+      ),
+    [produtos, filtro, busca],
   );
   const selecaoVisivel = restringirSelecao(selecionados, visiveis);
   const quantidade = selecaoVisivel.size;
+  const detalhesSelecionados = visiveis.filter((p) => selecaoVisivel.has(p.id));
+  const ativosSelecionados = detalhesSelecionados.filter(
+    (p) => p.status === "ativo",
+  ).length;
+  const inativosSelecionados = quantidade - ativosSelecionados;
+
   const todosMarcados = visiveis.length > 0 && quantidade === visiveis.length;
   const selecaoBloqueada = carregando || saindo || mutando;
 
+  function alterarPreferencias(
+    patch: Partial<PreferenciasCatalogo>,
+    manterSelecao = false,
+  ) {
+    const nova = { ...preferencias, ...patch };
+    if (manterSelecao)
+      setSelecionados(
+        restringirSelecao(
+          selecaoVisivel,
+          filtrarProdutos(produtos, nova.busca, nova.filtro),
+        ),
+      );
+    else setSelecionados(new Set());
+    salvarPreferenciasCatalogo(nova);
+    setPreferencias(nova);
+    setCarregando(true);
+    setErro("");
+  }
   function mudarCriterio(novaBusca: string, novoFiltro: string) {
-    // Intersection with the previous view prevents hidden selections returning.
-    const novaLista = filtrarProdutos(produtos, novaBusca, novoFiltro);
-    setSelecionados(restringirSelecao(selecaoVisivel, novaLista));
-    setBusca(novaBusca);
-    setFiltro(novoFiltro);
+    alterarPreferencias(
+      { busca: novaBusca, filtro: novoFiltro, pagina: 1 },
+      true,
+    );
   }
   function marcarProduto(id: number, marcar: boolean) {
     if (selecaoBloqueada) return;
@@ -191,12 +276,16 @@ export default function ProdutosPage() {
   }
   async function executarLote(acao: AcaoLote) {
     if (!quantidade || selecaoBloqueada || loteEmAndamento.current) return;
-    const ids = [...selecaoVisivel];
+    const plano =
+      acao === "excluir"
+        ? null
+        : planejarStatus(visiveis, selecaoVisivel, acao);
+    const ids = plano ? plano.ids : [...selecaoVisivel];
+    if (!ids.length) return;
+    const jaEstavam = plano?.jaNoStatus || 0;
     if (
       acao === "excluir" &&
-      !window.confirm(
-        `Excluir ${ids.length} ${ids.length === 1 ? "produto selecionado" : "produtos selecionados"}? As fotos associadas também serão removidas. Essa ação não pode ser desfeita.`,
-      )
+      !window.confirm(confirmarExclusao(detalhesSelecionados))
     )
       return;
     loteEmAndamento.current = true;
@@ -230,15 +319,25 @@ export default function ProdutosPage() {
       }
       setSelecionados(new Set());
       const total = resultado.afetados;
-      const contagem =
-        total === resultado.solicitados
-          ? `${total}`
-          : `${total} de ${resultado.solicitados}`;
+      const jaNoStatus = jaEstavam + (resultado.jaNoStatus || 0);
+      const ausentes =
+        resultado.naoEncontrados ??
+        Math.max(
+          0,
+          resultado.solicitados -
+            resultado.afetados -
+            (resultado.jaNoStatus || 0),
+        );
+      const contagem = ausentes
+        ? `${total} de ${resultado.solicitados}`
+        : String(total);
       let mensagem =
         acao === "excluir"
           ? `${contagem} ${total === 1 ? "produto excluído" : "produtos excluídos"}.`
-          : `${contagem} ${total === 1 ? "produto definido" : "produtos definidos"} como ${acao === "ativo" ? "ativo" : "inativo"}${total === 1 ? "" : "s"}.`;
-      if (total !== resultado.solicitados)
+          : `${contagem} ${total === 1 ? "produto alterado" : "produtos alterados"} para ${acao === "ativo" ? "ativo" : "inativo"}${total === 1 ? "" : "s"}.`;
+      if (jaNoStatus)
+        mensagem += ` ${jaNoStatus} já ${jaNoStatus === 1 ? "estava" : "estavam"} ${acao === "ativo" ? "ativo" : "inativo"}${jaNoStatus === 1 ? "" : "s"}.`;
+      if (ausentes)
         mensagem +=
           " Alguns produtos já não existiam. A lista foi sincronizada.";
       if (resultado.fotosNaoRemovidas) {
@@ -246,6 +345,8 @@ export default function ProdutosPage() {
         setAvisoAtencao(true);
       }
       setAviso(mensagem);
+      setCarregando(true);
+      setTentativa((n) => n + 1);
     } catch (error) {
       falha(error);
     } finally {
@@ -253,7 +354,7 @@ export default function ProdutosPage() {
       setLote(null);
     }
   }
-  const ativos = produtos.filter((p) => p.status === "ativo").length;
+  const ativos = paginaDados.resumo.ativos;
   const inicial = carregando && produtos.length === 0;
 
   function acoes(produto: Produto) {
@@ -356,7 +457,7 @@ export default function ProdutosPage() {
       <div className="summary-grid">
         <div className="summary-card">
           <span>Total de produtos</span>
-          <strong>{inicial ? "—" : produtos.length}</strong>
+          <strong>{inicial ? "—" : paginaDados.resumo.total}</strong>
           <span className="summary-icon">
             <Icon name="box" size={23} />
           </span>
@@ -370,7 +471,7 @@ export default function ProdutosPage() {
         </div>
         <div className="summary-card">
           <span>Inativos</span>
-          <strong>{inicial ? "—" : produtos.length - ativos}</strong>
+          <strong>{inicial ? "—" : paginaDados.resumo.inativos}</strong>
           <span className="summary-icon">
             <Icon name="clock" size={23} />
           </span>
@@ -406,6 +507,7 @@ export default function ProdutosPage() {
               aria-label="Buscar produtos"
               placeholder="Buscar por nome…"
               value={busca}
+              maxLength={120}
               disabled={lote !== null}
               onChange={(e) => mudarCriterio(e.target.value, filtro)}
             />
@@ -428,7 +530,13 @@ export default function ProdutosPage() {
             <select
               aria-label="Ordenar por"
               value={ordem}
-              onChange={(e) => setOrdem(e.target.value as Ordem)}
+              disabled={lote !== null}
+              onChange={(e) =>
+                alterarPreferencias({
+                  ordem: e.target.value as Ordem,
+                  pagina: 1,
+                })
+              }
             >
               <option value="atualizados">Última alteração</option>
               <option value="criados">Criação mais recente</option>
@@ -448,7 +556,7 @@ export default function ProdutosPage() {
           <span>
             {inicial
               ? "Preparando seu catálogo"
-              : `${visiveis.length} ${visiveis.length === 1 ? "produto" : "produtos"}`}
+              : `${paginaDados.total} ${paginaDados.total === 1 ? "produto" : "produtos"} · ${visiveis.length} nesta página`}
           </span>
           <span role="status">
             {carregando && !inicial
@@ -458,7 +566,7 @@ export default function ProdutosPage() {
                 : ""}
           </span>
         </div>
-        {inicial ? (
+        {carregando && !visiveis.length ? (
           <ProductSkeleton />
         ) : !visiveis.length ? (
           <div className="empty-state">
@@ -466,20 +574,20 @@ export default function ProdutosPage() {
               <Icon name="box" size={34} />
             </span>
             <h2>
-              {produtos.length
+              {paginaDados.resumo.total
                 ? "Nenhum produto encontrado"
                 : erro
                   ? "Seu catálogo não carregou"
                   : "Seu catálogo começa aqui"}
             </h2>
             <p>
-              {produtos.length
+              {paginaDados.resumo.total
                 ? "Ajuste a busca ou o filtro para encontrar o que precisa."
                 : erro
                   ? "Tente atualizar a lista novamente."
                   : "Adicione seu primeiro produto e mantenha tudo em ordem."}
             </p>
-            {!produtos.length && !erro && (
+            {!paginaDados.resumo.total && !erro && (
               <Link href="/produtos/novo" className="button button-primary">
                 <Icon name="plus" />
                 Adicionar produto
@@ -621,6 +729,58 @@ export default function ProdutosPage() {
             </div>
           </>
         )}
+        <div className="pagination-bar">
+          <label>
+            Por página{" "}
+            <select
+              aria-label="Produtos por página"
+              value={limite}
+              disabled={carregando || mutando || saindo}
+              onChange={(e) =>
+                alterarPreferencias({
+                  limite: Number(e.target.value),
+                  pagina: 1,
+                })
+              }
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span role="status" aria-label="Página atual">
+            Página {paginaDados.pagina} de {paginaDados.paginas}
+          </span>
+          <nav aria-label="Paginação de produtos">
+            <button
+              className="button button-secondary"
+              disabled={
+                carregando || mutando || saindo || paginaDados.pagina <= 1
+              }
+              onClick={() =>
+                alterarPreferencias({ pagina: paginaDados.pagina - 1 })
+              }
+            >
+              Anterior
+            </button>
+            <button
+              className="button button-secondary"
+              disabled={
+                carregando ||
+                mutando ||
+                saindo ||
+                paginaDados.pagina >= paginaDados.paginas
+              }
+              onClick={() =>
+                alterarPreferencias({ pagina: paginaDados.pagina + 1 })
+              }
+            >
+              Próxima
+            </button>
+          </nav>
+        </div>
       </section>
       {quantidade > 0 && (
         <>
@@ -632,12 +792,23 @@ export default function ProdutosPage() {
           >
             <strong aria-live="polite">
               {quantidade} {quantidade === 1 ? "selecionado" : "selecionados"}
+              <span className="selection-counts">
+                {ativosSelecionados}{" "}
+                {ativosSelecionados === 1 ? "ativo" : "ativos"} ·{" "}
+                {inativosSelecionados}{" "}
+                {inativosSelecionados === 1 ? "inativo" : "inativos"}
+              </span>
             </strong>
             <div className="bulk-buttons">
               <button
                 className="button button-secondary"
                 aria-label="Ativar selecionados"
-                disabled={selecaoBloqueada}
+                title={
+                  !inativosSelecionados
+                    ? "Todos os selecionados já estão ativos"
+                    : "Ativar somente os inativos selecionados"
+                }
+                disabled={selecaoBloqueada || !inativosSelecionados}
                 onClick={() => void executarLote("ativo")}
               >
                 {lote === "ativo" ? <Spinner /> : <Icon name="check" />}
@@ -646,7 +817,12 @@ export default function ProdutosPage() {
               <button
                 className="button button-secondary"
                 aria-label="Inativar selecionados"
-                disabled={selecaoBloqueada}
+                title={
+                  !ativosSelecionados
+                    ? "Todos os selecionados já estão inativos"
+                    : "Inativar somente os ativos selecionados"
+                }
+                disabled={selecaoBloqueada || !ativosSelecionados}
                 onClick={() => void executarLote("inativo")}
               >
                 {lote === "inativo" ? <Spinner /> : <Icon name="clock" />}

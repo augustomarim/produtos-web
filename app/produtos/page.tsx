@@ -1,6 +1,6 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Produto } from "../../src/types/produto";
@@ -14,9 +14,28 @@ import {
 } from "../../src/lib/produtos";
 import { Icon, ProductSkeleton, Shell, Spinner } from "../../src/components/ui";
 
+import Checkbox from "../../src/components/Checkbox";
+import {
+  restringirSelecao,
+  selecionarProduto,
+  selecionarVisiveis,
+} from "../../src/lib/selecao";
+
+type ResultadoLote = {
+  solicitados: number;
+  afetados: number;
+  produtos?: Produto[];
+  idsExcluidos?: number[];
+  fotosNaoRemovidas?: number;
+};
+type AcaoLote = "ativo" | "inativo" | "excluir";
 type Operacao = "status" | "excluir";
 export default function ProdutosPage() {
   const router = useRouter();
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
+  const [lote, setLote] = useState<AcaoLote | null>(null);
+  const [avisoAtencao, setAvisoAtencao] = useState(false);
+  const loteEmAndamento = useRef(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
@@ -27,7 +46,7 @@ export default function ProdutosPage() {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("todos");
   const [ordem, setOrdem] = useState<Ordem>("atualizados");
-  const mutando = Object.keys(pendentes).length > 0;
+  const mutando = Object.keys(pendentes).length > 0 || lote !== null;
   const navegacaoBloqueada = saindo || mutando;
 
   useEffect(() => {
@@ -37,7 +56,10 @@ export default function ProdutosPage() {
       signal: controller.signal,
     })
       .then((dados) => {
-        if (ativo) setProdutos(dados);
+        if (ativo) {
+          setProdutos(dados);
+          setSelecionados((ids) => restringirSelecao(ids, dados));
+        }
       })
       .catch((error) => {
         if (!ativo) return;
@@ -91,7 +113,7 @@ export default function ProdutosPage() {
     }
   }
   async function executar(produto: Produto, operacao: Operacao) {
-    if (pendentes[produto.id] || saindo || carregando) return;
+    if (pendentes[produto.id] || saindo || carregando || lote !== null) return;
     if (
       operacao === "excluir" &&
       !window.confirm(
@@ -100,6 +122,7 @@ export default function ProdutosPage() {
     )
       return;
     setPendentes((p) => ({ ...p, [produto.id]: operacao }));
+    setAvisoAtencao(false);
     setErro("");
     setAviso("");
     try {
@@ -124,6 +147,7 @@ export default function ProdutosPage() {
     } catch (error) {
       falha(error);
     } finally {
+      setSelecionados((ids) => selecionarProduto(ids, produto.id, false));
       setPendentes((p) => {
         const novo = { ...p };
         delete novo[produto.id];
@@ -135,12 +159,106 @@ export default function ProdutosPage() {
     () => ordenarProdutos(filtrarProdutos(produtos, busca, filtro), ordem),
     [produtos, filtro, busca, ordem],
   );
+  const selecaoVisivel = restringirSelecao(selecionados, visiveis);
+  const quantidade = selecaoVisivel.size;
+  const todosMarcados = visiveis.length > 0 && quantidade === visiveis.length;
+  const selecaoBloqueada = carregando || saindo || mutando;
+
+  function mudarCriterio(novaBusca: string, novoFiltro: string) {
+    // Intersection with the previous view prevents hidden selections returning.
+    const novaLista = filtrarProdutos(produtos, novaBusca, novoFiltro);
+    setSelecionados(restringirSelecao(selecaoVisivel, novaLista));
+    setBusca(novaBusca);
+    setFiltro(novoFiltro);
+  }
+  function marcarProduto(id: number, marcar: boolean) {
+    if (selecaoBloqueada) return;
+    try {
+      setSelecionados(selecionarProduto(selecaoVisivel, id, marcar));
+      setErro("");
+    } catch (error) {
+      falha(error);
+    }
+  }
+  function marcarTodos(marcar: boolean) {
+    if (selecaoBloqueada) return;
+    try {
+      setSelecionados(selecionarVisiveis(visiveis, marcar));
+      setErro("");
+    } catch (error) {
+      falha(error);
+    }
+  }
+  async function executarLote(acao: AcaoLote) {
+    if (!quantidade || selecaoBloqueada || loteEmAndamento.current) return;
+    const ids = [...selecaoVisivel];
+    if (
+      acao === "excluir" &&
+      !window.confirm(
+        `Excluir ${ids.length} ${ids.length === 1 ? "produto selecionado" : "produtos selecionados"}? As fotos associadas também serão removidas. Essa ação não pode ser desfeita.`,
+      )
+    )
+      return;
+    loteEmAndamento.current = true;
+    setLote(acao);
+    setErro("");
+    setAviso("");
+    setAvisoAtencao(false);
+    try {
+      const resultado = await apiAutenticada<ResultadoLote>(
+        acao === "excluir" ? "/api/produtos" : "/api/produtos/status",
+        {
+          method: acao === "excluir" ? "DELETE" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(
+            acao === "excluir" ? { ids } : { ids, status: acao },
+          ),
+        },
+      );
+      const solicitados = new Set(ids);
+      if (acao === "excluir") {
+        setProdutos((lista) => lista.filter((p) => !solicitados.has(p.id)));
+      } else {
+        const atualizados = new Map(
+          (resultado.produtos || []).map((p) => [p.id, p]),
+        );
+        setProdutos((lista) =>
+          lista
+            .filter((p) => !solicitados.has(p.id) || atualizados.has(p.id))
+            .map((p) => atualizados.get(p.id) || p),
+        );
+      }
+      setSelecionados(new Set());
+      const total = resultado.afetados;
+      const contagem =
+        total === resultado.solicitados
+          ? `${total}`
+          : `${total} de ${resultado.solicitados}`;
+      let mensagem =
+        acao === "excluir"
+          ? `${contagem} ${total === 1 ? "produto excluído" : "produtos excluídos"}.`
+          : `${contagem} ${total === 1 ? "produto definido" : "produtos definidos"} como ${acao === "ativo" ? "ativo" : "inativo"}${total === 1 ? "" : "s"}.`;
+      if (total !== resultado.solicitados)
+        mensagem +=
+          " Alguns produtos já não existiam. A lista foi sincronizada.";
+      if (resultado.fotosNaoRemovidas) {
+        mensagem += ` Os produtos foram excluídos, mas ${resultado.fotosNaoRemovidas} foto(s) não puderam ser removidas do armazenamento.`;
+        setAvisoAtencao(true);
+      }
+      setAviso(mensagem);
+    } catch (error) {
+      falha(error);
+    } finally {
+      loteEmAndamento.current = false;
+      setLote(null);
+    }
+  }
   const ativos = produtos.filter((p) => p.status === "ativo").length;
   const inicial = carregando && produtos.length === 0;
 
   function acoes(produto: Produto) {
     const operacao = pendentes[produto.id];
-    const bloqueado = !!operacao || saindo || carregando;
+    const bloqueado = !!operacao || saindo || carregando || lote !== null;
     return (
       <div className="row-actions">
         <Link
@@ -271,7 +389,10 @@ export default function ProdutosPage() {
             </button>
           </div>
         ) : aviso ? (
-          <div role="status" className="notice notice-success">
+          <div
+            role="status"
+            className={`notice ${avisoAtencao ? "notice-warning" : "notice-success"}`}
+          >
             <Icon name="check" />
             {aviso}
           </div>
@@ -285,7 +406,8 @@ export default function ProdutosPage() {
               aria-label="Buscar produtos"
               placeholder="Buscar por nome…"
               value={busca}
-              onChange={(e) => setBusca(e.target.value)}
+              disabled={lote !== null}
+              onChange={(e) => mudarCriterio(e.target.value, filtro)}
             />
           </div>
           <label className="compact-field">
@@ -293,7 +415,8 @@ export default function ProdutosPage() {
             <select
               aria-label="Filtrar por status"
               value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
+              disabled={lote !== null}
+              onChange={(e) => mudarCriterio(busca, e.target.value)}
             >
               <option value="todos">Todos</option>
               <option value="ativo">Ativos</option>
@@ -369,6 +492,15 @@ export default function ProdutosPage() {
               <table className="products-table">
                 <thead>
                   <tr>
+                    <th scope="col" className="selection-cell">
+                      <Checkbox
+                        label="Selecionar todos os produtos visíveis"
+                        checked={todosMarcados}
+                        mixed={quantidade > 0 && !todosMarcados}
+                        disabled={selecaoBloqueada || !visiveis.length}
+                        onChange={marcarTodos}
+                      />
+                    </th>
                     <th scope="col">Produto</th>
                     <th scope="col">Status</th>
                     <th scope="col">Datas</th>
@@ -379,7 +511,21 @@ export default function ProdutosPage() {
                 </thead>
                 <tbody>
                   {visiveis.map((p) => (
-                    <tr key={p.id} aria-busy={!!pendentes[p.id]}>
+                    <tr
+                      key={p.id}
+                      aria-busy={!!pendentes[p.id] || lote !== null}
+                      className={
+                        selecaoVisivel.has(p.id) ? "product-selected" : ""
+                      }
+                    >
+                      <td className="selection-cell">
+                        <Checkbox
+                          label={`Selecionar ${p.descricao_produto}`}
+                          checked={selecaoVisivel.has(p.id)}
+                          disabled={selecaoBloqueada}
+                          onChange={(marcar) => marcarProduto(p.id, marcar)}
+                        />
+                      </td>
                       <td>
                         <div className="product-identity">
                           {imagem(p)}
@@ -420,13 +566,29 @@ export default function ProdutosPage() {
               </table>
             </div>
             <div className="mobile-products">
+              <div className="mobile-select-all">
+                <Checkbox
+                  label="Selecionar todos os produtos visíveis"
+                  checked={todosMarcados}
+                  mixed={quantidade > 0 && !todosMarcados}
+                  disabled={selecaoBloqueada || !visiveis.length}
+                  onChange={marcarTodos}
+                />
+                <span>Selecionar visíveis</span>
+              </div>
               {visiveis.map((p) => (
                 <article
                   key={p.id}
-                  className="mobile-product"
+                  className={`mobile-product ${selecaoVisivel.has(p.id) ? "product-selected" : ""}`}
                   aria-busy={!!pendentes[p.id]}
                 >
                   <div className="mobile-product-top">
+                    <Checkbox
+                      label={`Selecionar ${p.descricao_produto}`}
+                      checked={selecaoVisivel.has(p.id)}
+                      disabled={selecaoBloqueada}
+                      onChange={(marcar) => marcarProduto(p.id, marcar)}
+                    />
                     <div className="product-identity">
                       {imagem(p)}
                       <div>
@@ -460,6 +622,56 @@ export default function ProdutosPage() {
           </>
         )}
       </section>
+      {quantidade > 0 && (
+        <>
+          <div className="bulk-space" />
+          <section
+            className="bulk-actions"
+            aria-label="Ações dos produtos selecionados"
+            aria-busy={lote !== null}
+          >
+            <strong aria-live="polite">
+              {quantidade} {quantidade === 1 ? "selecionado" : "selecionados"}
+            </strong>
+            <div className="bulk-buttons">
+              <button
+                className="button button-secondary"
+                aria-label="Ativar selecionados"
+                disabled={selecaoBloqueada}
+                onClick={() => void executarLote("ativo")}
+              >
+                {lote === "ativo" ? <Spinner /> : <Icon name="check" />}
+                {lote === "ativo" ? "Ativando…" : "Ativar"}
+              </button>
+              <button
+                className="button button-secondary"
+                aria-label="Inativar selecionados"
+                disabled={selecaoBloqueada}
+                onClick={() => void executarLote("inativo")}
+              >
+                {lote === "inativo" ? <Spinner /> : <Icon name="clock" />}
+                {lote === "inativo" ? "Inativando…" : "Inativar"}
+              </button>
+              <button
+                className="button button-danger"
+                aria-label="Excluir selecionados"
+                disabled={selecaoBloqueada}
+                onClick={() => void executarLote("excluir")}
+              >
+                {lote === "excluir" ? <Spinner /> : <Icon name="trash" />}
+                {lote === "excluir" ? "Excluindo…" : "Excluir"}
+              </button>
+              <button
+                className="text-button"
+                disabled={selecaoBloqueada}
+                onClick={() => setSelecionados(new Set())}
+              >
+                Limpar seleção
+              </button>
+            </div>
+          </section>
+        </>
+      )}
       <p className="history-note">
         As datas anteriores ao registro do histórico aparecem como “Não
         registrada”. Horários no fuso do seu dispositivo.

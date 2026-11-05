@@ -12,10 +12,19 @@ export default defineConfig({
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH }
       : {},
   },
-  webServer: {
-    command: "npm run start -- --hostname 127.0.0.1 --port 3411",
-    url: "http://127.0.0.1:3411/login",
-    reuseExistingServer: false,
-    timeout: 30_000,
-  },
+  webServer: [
+    {
+      command: "node tests/fixtures/backend.mjs",
+      url: "http://127.0.0.1:3511/health",
+      reuseExistingServer: false,
+      timeout: 10_000,
+    },
+    {
+      env: { API_URL: "http://127.0.0.1:3511" },
+      command: "npm run start -- --hostname 127.0.0.1 --port 3411",
+      url: "http://127.0.0.1:3411/login",
+      reuseExistingServer: false,
+      timeout: 30_000,
+    },
+  ],
 });

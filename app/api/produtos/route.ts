@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { encaminharLote } from "../../../src/lib/proxy-lote";
 
 export async function GET(request: NextRequest) {
   const apiUrl = process.env.API_URL;
@@ -97,4 +98,7 @@ export async function POST(request: NextRequest) {
       { status: 502 },
     );
   }
+}
+export async function DELETE(request: NextRequest) {
+  return encaminharLote(request, "DELETE");
 }

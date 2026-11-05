@@ -103,3 +103,29 @@ Esse comando faz o build e abre um servidor de produção local na porta 3411.
 Os testes não usam credenciais, não chamam o Render e não alteram o Neon.
 Para usar um Chromium já instalado, defina opcionalmente
 `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` com seu caminho.
+
+
+## Seleção de produtos e ações em lote
+
+- Checkbox por produto e seleção de todos os produtos visíveis.
+- Cabeçalho indeterminado quando apenas parte da lista está selecionada.
+- Buscar ou mudar o filtro remove da seleção os produtos que ficaram ocultos;
+  limpar a busca não restaura seleções escondidas.
+- Até 100 produtos por ação. Se houver mais de 100 visíveis, refine o filtro
+  ou marque individualmente, respeitando o limite.
+- A barra permite Ativar, Inativar, Excluir e Limpar seleção. Ativar/inativar
+  define o estado desejado; nunca usa o toggle individual para um lote.
+- Excluir exige confirmação com a quantidade. Durante a requisição, seleção
+  e ações conflitantes ficam desabilitadas, sem esconder botões da página.
+- Sucesso atualiza os registros retornados e limpa a seleção. Uma falha mantém
+  a seleção para revisão; uma resposta com menos afetados informa a contagem
+  e sincroniza produtos que já não existiam.
+- Uma falha na limpeza de fotos é avisada separadamente do resultado da
+  exclusão no banco. Não existe atomicidade entre banco e Cloudinary.
+
+O BFF encaminha `PATCH /api/produtos/status` e `DELETE /api/produtos` ao
+backend, com JSON e Bearer Token. Publique o backend com essas rotas antes
+de publicar esta interface. Não é necessária uma migração nova.
+
+Os testes de navegador também iniciam um backend falso local na porta 3511
+para verificar o BFF. Não alteram o Render nem o Neon.

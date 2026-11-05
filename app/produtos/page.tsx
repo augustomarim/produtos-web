@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Produto } from "../../src/types/produto";
 import { apiAutenticada } from "../../src/lib/api";
-import { limparSessao, SessaoExpiradaError } from "../../src/lib/sessao";
+import {
+  limparSessao,
+  avisarMudancaSessao,
+  comBloqueioSessao,
+  SessaoExpiradaError,
+} from "../../src/lib/sessao";
 import {
   formatarData,
   filtrarProdutos,
@@ -165,13 +170,17 @@ export default function ProdutosPage() {
     setSaindo(true);
     setErro("");
     try {
-      const resposta = await fetch("/api/auth/logout", { method: "POST" });
+      const resposta = await comBloqueioSessao(() =>
+        fetch("/api/auth/logout", { method: "POST" }),
+      );
       if (!resposta.ok)
         throw new Error("Não foi possível sair. Tente novamente.");
       limparSessao();
       limparPreferenciasCatalogo();
       setSelecionados(new Set());
-      router.replace("/login");
+      dismiss();
+      avisarMudancaSessao();
+      window.location.replace("/login");
     } catch (error) {
       falha(error);
       setSaindo(false);
@@ -439,7 +448,7 @@ export default function ProdutosPage() {
         <div>
           <span className="eyebrow">CATÁLOGO</span>
           <h1>Seus produtos</h1>
-          <p className="muted">Tudo organizado. Sempre atualizado.</p>
+          <p className="muted">Seu catálogo é exclusivo da sua conta.</p>
         </div>
         <div className="page-actions">
           <button

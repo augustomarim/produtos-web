@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import type { Produto } from "../../src/types/produto";
-const token = () =>
-  `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 900 })).toString("base64url")}.signature`;
+const token = (id = 1) =>
+  `header.${Buffer.from(JSON.stringify({ id, exp: Math.floor(Date.now() / 1000) + 900 })).toString("base64url")}.signature`;
 const imagem = "/fixture-product.svg";
 export async function preparar(
   page: Page,
@@ -9,6 +9,7 @@ export async function preparar(
   iniciais?: Produto[],
 ) {
   let loggedIn = autenticado;
+  let contaAtiva = 1;
   let produtos: Produto[] = iniciais || [
     {
       id: 1,
@@ -41,6 +42,10 @@ export async function preparar(
       updatedAt: null,
     },
   ];
+  const catalogos = new Map<number, Produto[]>([
+    [1, produtos],
+    [2, []],
+  ]);
   const calls = {
     refresh: 0,
     create: 0,
@@ -66,9 +71,15 @@ export async function preparar(
       path = new URL(req.url()).pathname,
       method = req.method();
     if (path === "/api/auth/login") {
+      catalogos.set(contaAtiva, produtos);
+      contaAtiva = req.postDataJSON().email === "b@example.test" ? 2 : 1;
+      produtos = catalogos.get(contaAtiva) || [];
       loggedIn = true;
       return route.fulfill({
-        json: { token: token(), usuario: { id: 1, nome: "Teste" } },
+        json: {
+          token: token(contaAtiva),
+          usuario: { id: contaAtiva, nome: "Teste" },
+        },
       });
     }
     if (path === "/api/auth/logout") {
@@ -81,7 +92,7 @@ export async function preparar(
       calls.refresh++;
       return route.fulfill(
         loggedIn
-          ? { json: { token: token() } }
+          ? { json: { token: token(contaAtiva) } }
           : { status: 401, json: { error: "Sessão expirada" } },
       );
     }

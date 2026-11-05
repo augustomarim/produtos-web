@@ -1,22 +1,27 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
 import {
   type FormEvent,
+  useCallback,
   useEffect,
   useRef,
   useState,
   useTransition,
 } from "react";
-import Link from "next/link";
+import { GuardedLink as Link, useFeedback } from "./Feedback";
+import { PhotoViewer, SlowFeedback, useUnsavedChanges } from "./Experience";
 import { useRouter } from "next/navigation";
 import type { Produto } from "../types/produto";
-import { apiAutenticada } from "../lib/api";
+import { ApiError, apiAutenticada } from "../lib/api";
 import { renovarSessao, SessaoExpiradaError } from "../lib/sessao";
 import { formatarData } from "../lib/produtos";
 import { Icon, Shell, Spinner } from "./ui";
 
 export default function ProdutoForm({ id }: { id?: string }) {
   const router = useRouter();
+  const { notify, confirm, dismiss } = useFeedback();
+  const codigoRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [campos, setCampos] = useState<Record<string, string>>({});
   const [navegando, iniciarNavegacao] = useTransition();
   const [codigo, setCodigo] = useState("");
   const [descricao, setDescricao] = useState("");
@@ -30,9 +35,41 @@ export default function ProdutoForm({ id }: { id?: string }) {
   const [tentativa, setTentativa] = useState(0);
   const [operacao, setOperacao] = useState<"salvar" | "foto" | null>(null);
   const [erro, setErro] = useState("");
-  const [aviso, setAviso] = useState("");
+
   const previewUrl = useRef("");
   const ocupado = operacao !== null || navegando;
+  const alterado =
+    pronto &&
+    (codigo !== (produto?.codigo_produto || "") ||
+      descricao !== (produto?.descricao_produto || "") ||
+      status !== (produto?.status || "ativo") ||
+      foto !== null ||
+      fotoInvalida);
+  const descartar = useCallback(() => {
+    setCodigo(produto?.codigo_produto || "");
+    setDescricao(produto?.descricao_produto || "");
+    setStatus(produto?.status || "ativo");
+    setFoto(null);
+    setFotoInvalida(false);
+    setPreview("");
+    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+    previewUrl.current = "";
+    setCampos({});
+    setErro("");
+  }, [produto]);
+  useUnsavedChanges(alterado, ocupado, descartar);
+  function limparCampo(nome: string) {
+    setCampos((c) => {
+      const novo = { ...c };
+      delete novo[nome];
+      return novo;
+    });
+  }
+  function focarCampo(nome: string) {
+    requestAnimationFrame(() =>
+      formRef.current?.querySelector<HTMLElement>(`[name="${nome}"]`)?.focus(),
+    );
+  }
 
   useEffect(() => {
     let ativo = true;
@@ -84,14 +121,19 @@ export default function ProdutoForm({ id }: { id?: string }) {
     setFoto(null);
     setPreview("");
     setFotoInvalida(false);
+    limparCampo("foto_produto");
     setErro("");
-    setAviso("");
+    dismiss();
     if (!arquivo) return;
     if (
       !["image/jpeg", "image/png", "image/webp"].includes(arquivo.type) ||
       arquivo.size > 4 * 1024 * 1024
     ) {
       setFotoInvalida(true);
+      setCampos((c) => ({
+        ...c,
+        foto_produto: "Selecione uma foto JPG, PNG ou WebP de até 4 MB.",
+      }));
       setErro("Selecione uma foto JPG, PNG ou WebP de até 4 MB.");
       return;
     }
@@ -103,6 +145,29 @@ export default function ProdutoForm({ id }: { id?: string }) {
     if (error instanceof SessaoExpiradaError) {
       router.replace("/login");
       return;
+    }
+    if (error instanceof ApiError) {
+      const camposApi: Record<string, string> = {};
+      for (const detalhe of error.details) {
+        const campo = {
+          codigo_produto: "codigo",
+          descricao_produto: "descricao",
+          status: "status",
+          foto_produto: "foto_produto",
+        }[detalhe.field];
+        if (campo) camposApi[campo] = detalhe.message;
+      }
+      if (error.status === 409)
+        camposApi.codigo = "Este código já está sendo usado. Escolha outro.";
+      if (error.status === 413)
+        camposApi.foto_produto =
+          "A imagem excede o tamanho permitido. Escolha uma foto de até 4 MB.";
+      if (Object.keys(camposApi).length) {
+        setCampos(camposApi);
+        setErro("Revise os campos destacados.");
+        focarCampo(Object.keys(camposApi)[0]);
+        return;
+      }
     }
     setErro(
       error instanceof Error
@@ -116,6 +181,7 @@ export default function ProdutoForm({ id }: { id?: string }) {
     setStatus("ativo");
     setProduto(null);
     selecionarFoto(null);
+    setCampos({});
   }
   async function salvar(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -124,13 +190,23 @@ export default function ProdutoForm({ id }: { id?: string }) {
       setErro("Escolha uma foto válida ou remova a seleção inválida.");
       return;
     }
-    if (!codigo.trim() || !descricao.trim()) {
-      setErro("Código e descrição são obrigatórios.");
+    const invalidos: Record<string, string> = {};
+    if (!codigo.trim()) invalidos.codigo = "Informe o código do produto.";
+    if (!descricao.trim())
+      invalidos.descricao = "Informe a descrição do produto.";
+    setCampos(invalidos);
+    if (Object.keys(invalidos).length) {
+      setErro("Revise os campos destacados.");
+      focarCampo(Object.keys(invalidos)[0]);
       return;
     }
+    const cadastrarOutro =
+      !id &&
+      (event.nativeEvent as SubmitEvent).submitter?.getAttribute("value") ===
+        "outro";
     setOperacao("salvar");
     setErro("");
-    setAviso("");
+    dismiss();
     try {
       const form = new FormData();
       form.set("codigo_produto", codigo.trim());
@@ -149,7 +225,12 @@ export default function ProdutoForm({ id }: { id?: string }) {
         selecionarFoto(null);
       }
       setOperacao(null);
-      iniciarNavegacao(() => router.replace("/produtos"));
+      notify(
+        id ? "Produto atualizado com sucesso." : "Produto criado com sucesso.",
+      );
+      if (cadastrarOutro)
+        requestAnimationFrame(() => codigoRef.current?.focus());
+      else iniciarNavegacao(() => router.replace("/produtos"));
     } catch (error) {
       falha(error);
       setOperacao(null);
@@ -158,21 +239,25 @@ export default function ProdutoForm({ id }: { id?: string }) {
   async function removerFoto() {
     if (!id || ocupado || !produto?.foto_produto) return;
     if (
-      !window.confirm(
-        "Remover a foto atual? A remoção é imediata e não pode ser desfeita.",
-      )
+      !(await confirm({
+        title: "Remover foto atual?",
+        description:
+          "A remoção é imediata e não pode ser desfeita. As demais alterações do formulário serão mantidas.",
+        confirmLabel: "Remover foto",
+        danger: true,
+      }))
     )
       return;
     setOperacao("foto");
     setErro("");
-    setAviso("");
+    dismiss();
     try {
       const p = await apiAutenticada<Produto>(`/api/produtos/${id}/foto`, {
         method: "DELETE",
       });
       setProduto(p);
       selecionarFoto(null);
-      setAviso(
+      notify(
         "Foto removida. As outras alterações só serão salvas ao confirmar o formulário.",
       );
     } catch (error) {
@@ -211,7 +296,10 @@ export default function ProdutoForm({ id }: { id?: string }) {
           {carregando ? (
             <div className="empty-state" role="status">
               <Spinner />
-              <p>Preparando formulário…</p>
+              <SlowFeedback
+                active={carregando}
+                message="Preparando formulário…"
+              />
             </div>
           ) : !pronto ? (
             <div className="empty-state">
@@ -230,7 +318,7 @@ export default function ProdutoForm({ id }: { id?: string }) {
               </button>
             </div>
           ) : (
-            <form onSubmit={salvar}>
+            <form ref={formRef} noValidate onSubmit={salvar}>
               <h2>Informações do produto</h2>
               <p className="form-hint" style={{ marginBottom: 23 }}>
                 Os campos com * são obrigatórios.
@@ -240,19 +328,37 @@ export default function ProdutoForm({ id }: { id?: string }) {
                   <span>Código *</span>
                   <input
                     className="form-input"
+                    ref={codigoRef}
                     name="codigo"
+                    aria-label="Código *"
+                    aria-invalid={!!campos.codigo}
+                    aria-describedby={campos.codigo ? "erro-codigo" : undefined}
                     value={codigo}
-                    onChange={(e) => setCodigo(e.target.value)}
+                    onChange={(e) => {
+                      setCodigo(e.target.value);
+                      limparCampo("codigo");
+                    }}
                     required
                     disabled={ocupado}
                     placeholder="Ex.: AG-001"
                   />
+                  {campos.codigo && (
+                    <span id="erro-codigo" className="field-error">
+                      {campos.codigo}
+                    </span>
+                  )}
                 </label>
                 {id ? (
                   <label className="form-field">
                     <span>Status</span>
                     <select
                       className="form-input"
+                      name="status"
+                      aria-label="Status"
+                      aria-invalid={!!campos.status}
+                      aria-describedby={
+                        campos.status ? "erro-status" : undefined
+                      }
                       value={status}
                       onChange={(e) =>
                         setStatus(e.target.value as "ativo" | "inativo")
@@ -262,6 +368,11 @@ export default function ProdutoForm({ id }: { id?: string }) {
                       <option value="ativo">Ativo</option>
                       <option value="inativo">Inativo</option>
                     </select>
+                    {campos.status && (
+                      <span id="erro-status" className="field-error">
+                        {campos.status}
+                      </span>
+                    )}
                   </label>
                 ) : (
                   <div className="form-field">
@@ -281,13 +392,26 @@ export default function ProdutoForm({ id }: { id?: string }) {
                 <textarea
                   className="form-input"
                   name="descricao"
+                  aria-label="Descrição *"
+                  aria-invalid={!!campos.descricao}
+                  aria-describedby={
+                    campos.descricao ? "erro-descricao" : undefined
+                  }
                   value={descricao}
-                  onChange={(e) => setDescricao(e.target.value)}
+                  onChange={(e) => {
+                    setDescricao(e.target.value);
+                    limparCampo("descricao");
+                  }}
                   required
                   disabled={ocupado}
                   rows={3}
                   placeholder="Como este produto deve aparecer no catálogo?"
                 />
+                {campos.descricao && (
+                  <span id="erro-descricao" className="field-error">
+                    {campos.descricao}
+                  </span>
+                )}
               </label>
               <div className="photo-section">
                 <h2>Foto do produto</h2>
@@ -296,16 +420,14 @@ export default function ProdutoForm({ id }: { id?: string }) {
                 </p>
                 <div className="photo-editor">
                   {imagem ? (
-                    <img
+                    <PhotoViewer
                       className="photo-preview"
                       src={imagem}
-                      alt={
+                      name={
                         foto
                           ? "Pré-visualização da nova foto"
                           : "Foto atual do produto"
                       }
-                      width={126}
-                      height={126}
                     />
                   ) : (
                     <span
@@ -324,6 +446,11 @@ export default function ProdutoForm({ id }: { id?: string }) {
                       <Icon name="image" />
                       {imagem ? "Escolher outra foto" : "Escolher foto"}
                       <input
+                        name="foto_produto"
+                        aria-invalid={!!campos.foto_produto}
+                        aria-describedby={
+                          campos.foto_produto ? "erro-foto" : undefined
+                        }
                         aria-label="Foto do produto"
                         className="file-overlay"
                         type="file"
@@ -372,6 +499,11 @@ export default function ProdutoForm({ id }: { id?: string }) {
                     </p>
                   </div>
                 </div>
+                {campos.foto_produto && (
+                  <p id="erro-foto" className="field-error">
+                    {campos.foto_produto}
+                  </p>
+                )}
                 {id && produto?.foto_produto && (
                   <p className="form-hint">
                     A remoção da foto é imediata. Uma nova foto só é enviada ao
@@ -400,12 +532,12 @@ export default function ProdutoForm({ id }: { id?: string }) {
                   {erro}
                 </p>
               )}
-              {aviso && (
-                <p role="status" className="notice notice-success form-notice">
-                  <Icon name="check" />
-                  {aviso}
-                </p>
-              )}
+              <SlowFeedback
+                active={ocupado}
+                message={
+                  operacao === "foto" ? "Removendo foto…" : "Salvando produto…"
+                }
+              />
               <div className="form-footer">
                 <Link
                   href="/produtos"
@@ -433,6 +565,17 @@ export default function ProdutoForm({ id }: { id?: string }) {
                       ? "Salvar alterações"
                       : "Criar produto"}
                 </button>
+                {!id && (
+                  <button
+                    className="button button-secondary"
+                    type="submit"
+                    name="destino"
+                    value="outro"
+                    disabled={ocupado}
+                  >
+                    Salvar e cadastrar outro
+                  </button>
+                )}
               </div>
             </form>
           )}

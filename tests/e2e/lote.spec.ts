@@ -33,8 +33,9 @@ test("seleção parcial, selecionar todos visíveis e exclusão cancelada", asyn
     }),
   ).not.toBeChecked();
   await page
-    .getByRole("combobox", { name: "Filtrar por status", exact: true })
-    .selectOption("inativo");
+    .getByRole("group", { name: "Filtrar catálogo" })
+    .getByRole("button", { name: /^Inativos/ })
+    .click();
   await expect(
     page.getByRole("region", { name: "Ações dos produtos selecionados" }),
   ).toHaveCount(0);
@@ -42,12 +43,13 @@ test("seleção parcial, selecionar todos visíveis e exclusão cancelada", asyn
   await expect(
     page.getByRole("region", { name: "Ações dos produtos selecionados" }),
   ).toContainText("1 selecionado");
-  page.once("dialog", (d) => {
-    expect(d.message()).toContain("1 produto selecionado");
-    void d.dismiss();
-  });
   await page
     .getByRole("button", { name: "Excluir selecionados", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Produto antigo");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancelar", exact: true })
     .click();
   expect(mock.calls.bulkDelete).toBe(0);
   await expect(todos).toBeChecked();
@@ -132,18 +134,19 @@ test("falha mantém seleção; exclusão parcial informa quantidades e falha de 
   ).toContainText("3 selecionados");
   mock.removerAntesDoLote(3);
   mock.falharFotos();
-  page.once("dialog", (d) => {
-    expect(d.message()).toContain("3 produtos selecionados");
-    void d.accept();
-  });
   await page
     .getByRole("button", { name: "Excluir selecionados", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("Café especial");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Excluir 3 produtos", exact: true })
     .click();
   await expect(
     page.getByRole("region", { name: "Ações dos produtos selecionados" }),
   ).toHaveCount(0);
   await expect(
-    page.locator("main [role=status]").filter({ hasText: "2 de 3" }),
+    page.locator(".toast [role=status]").filter({ hasText: "2 de 3" }),
   ).toContainText("foto(s) não puderam");
   await expect(page.locator(".products-table tbody tr")).toHaveCount(0);
   expect(mock.calls.bulkDelete).toBe(1);

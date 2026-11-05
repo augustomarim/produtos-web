@@ -31,14 +31,12 @@ test("status homogêneo desabilita ação e confirmação lista nomes e excedent
   await expect(
     page.getByRole("button", { name: "Inativar selecionados", exact: true }),
   ).toBeEnabled();
-  page.once("dialog", async (d) => {
-    expect(d.message()).toContain("Produto");
-    expect(d.message()).toContain("mais 20 produtos");
-    await d.dismiss();
-  });
   await page
     .getByRole("button", { name: "Excluir selecionados", exact: true })
     .click();
+  await expect(page.getByRole("dialog")).toContainText("mais 20 produtos");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(barra).toBeVisible();
 });
 
@@ -91,10 +89,13 @@ test("excluir último item da página volta para uma página válida", async ({
     .selectOption("10");
   await page.getByRole("button", { name: "Próxima", exact: true }).click();
   await expect(page.locator(".products-table tbody tr")).toHaveCount(1);
-  page.once("dialog", (d) => d.accept());
   await page
     .locator(".products-table tbody tr")
     .getByRole("button", { name: /^Excluir / })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Excluir 1 produto", exact: true })
     .click();
   await expect(
     page.getByRole("status", { name: "Página atual" }),

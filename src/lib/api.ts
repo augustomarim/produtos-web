@@ -8,6 +8,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public details: { field: string; message: string }[] = [],
   ) {
     super(message);
   }
@@ -41,6 +42,7 @@ export async function apiAutenticada<T>(
     throw new ApiError(
       detalhes || dados.error || "Não foi possível concluir a operação.",
       resposta.status,
+      Array.isArray(dados.details) ? dados.details : [],
     );
   }
   return dados as T;

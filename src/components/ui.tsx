@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { GuardedLink as Link } from "./Feedback";
 import type { ReactNode } from "react";
 
 export function Icon({

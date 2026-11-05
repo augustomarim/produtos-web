@@ -103,11 +103,16 @@ test("formulários validam fotos, criam e editam; remoção preserva o produto",
     path: test.info().outputPath("form.png"),
     fullPage: true,
   });
-  page.once("dialog", (d) => d.accept());
   await page
     .getByRole("button", { name: "Remover foto atual", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Foto removida");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Remover foto", exact: true })
+    .click();
+  await expect(page.locator(".toast [role=status]")).toContainText(
+    "Foto removida",
+  );
   await expect(
     page.getByRole("textbox", { name: "Descrição *", exact: true }),
   ).toHaveValue("Água atualizada");
@@ -142,8 +147,9 @@ test("mobile sem rolagem horizontal, busca, filtros e logout", async ({
   await expect(page.locator(".mobile-product")).toContainText("Não registrada");
   await page.getByRole("textbox", { name: "Buscar produtos" }).fill("");
   await page
-    .getByRole("combobox", { name: "Filtrar por status", exact: true })
-    .selectOption("inativo");
+    .getByRole("group", { name: "Filtrar catálogo" })
+    .getByRole("button", { name: /^Inativos/ })
+    .click();
   await expect(page.locator(".mobile-product")).toHaveCount(1);
   await page.getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);

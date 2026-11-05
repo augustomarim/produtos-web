@@ -1,5 +1,4 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -13,13 +12,18 @@ import {
 } from "../../src/lib/produtos";
 import { Icon, ProductSkeleton, Shell, Spinner } from "../../src/components/ui";
 
+import { useFeedback } from "../../src/components/Feedback";
+import {
+  DeleteDescription,
+  PhotoViewer,
+  SlowFeedback,
+} from "../../src/components/Experience";
 import Checkbox from "../../src/components/Checkbox";
 import {
   restringirSelecao,
   selecionarProduto,
   selecionarVisiveis,
   planejarStatus,
-  confirmarExclusao,
 } from "../../src/lib/selecao";
 
 import {
@@ -46,14 +50,13 @@ type AcaoLote = "ativo" | "inativo" | "excluir";
 type Operacao = "status" | "excluir";
 export default function ProdutosPage() {
   const router = useRouter();
+  const { notify, dismiss, confirm } = useFeedback();
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [lote, setLote] = useState<AcaoLote | null>(null);
-  const [avisoAtencao, setAvisoAtencao] = useState(false);
   const loteEmAndamento = useRef(false);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
-  const [aviso, setAviso] = useState("");
   const [tentativa, setTentativa] = useState(0);
   const [saindo, setSaindo] = useState(false);
   const [pendentes, setPendentes] = useState<Record<number, Operacao>>({});
@@ -176,12 +179,19 @@ export default function ProdutosPage() {
   }
   async function executar(produto: Produto, operacao: Operacao) {
     if (pendentes[produto.id] || saindo || carregando || lote !== null) return;
-    if (operacao === "excluir" && !window.confirm(confirmarExclusao([produto])))
+    if (
+      operacao === "excluir" &&
+      !(await confirm({
+        title: "Excluir produto?",
+        description: <DeleteDescription produtos={[produto]} />,
+        confirmLabel: "Excluir 1 produto",
+        danger: true,
+      }))
+    )
       return;
     setPendentes((p) => ({ ...p, [produto.id]: operacao }));
-    setAvisoAtencao(false);
     setErro("");
-    setAviso("");
+    dismiss();
     try {
       if (operacao === "status") {
         const atualizado = await apiAutenticada<Produto>(
@@ -191,7 +201,7 @@ export default function ProdutosPage() {
         setProdutos((lista) =>
           lista.map((p) => (p.id === atualizado.id ? atualizado : p)),
         );
-        setAviso(
+        notify(
           `${atualizado.descricao_produto}: produto ${atualizado.status === "ativo" ? "ativado" : "inativado"}.`,
         );
       } else {
@@ -199,7 +209,7 @@ export default function ProdutosPage() {
           method: "DELETE",
         });
         setProdutos((lista) => lista.filter((p) => p.id !== produto.id));
-        setAviso("Produto excluído.");
+        notify("Produto excluído.");
       }
       setCarregando(true);
       setTentativa((n) => n + 1);
@@ -285,14 +295,18 @@ export default function ProdutosPage() {
     const jaEstavam = plano?.jaNoStatus || 0;
     if (
       acao === "excluir" &&
-      !window.confirm(confirmarExclusao(detalhesSelecionados))
+      !(await confirm({
+        title: "Excluir produtos selecionados?",
+        description: <DeleteDescription produtos={detalhesSelecionados} />,
+        confirmLabel: `Excluir ${detalhesSelecionados.length} ${detalhesSelecionados.length === 1 ? "produto" : "produtos"}`,
+        danger: true,
+      }))
     )
       return;
     loteEmAndamento.current = true;
     setLote(acao);
     setErro("");
-    setAviso("");
-    setAvisoAtencao(false);
+    dismiss();
     try {
       const resultado = await apiAutenticada<ResultadoLote>(
         acao === "excluir" ? "/api/produtos" : "/api/produtos/status",
@@ -342,9 +356,8 @@ export default function ProdutosPage() {
           " Alguns produtos já não existiam. A lista foi sincronizada.";
       if (resultado.fotosNaoRemovidas) {
         mensagem += ` Os produtos foram excluídos, mas ${resultado.fotosNaoRemovidas} foto(s) não puderam ser removidas do armazenamento.`;
-        setAvisoAtencao(true);
       }
-      setAviso(mensagem);
+      notify(mensagem, !!resultado.fotosNaoRemovidas);
       setCarregando(true);
       setTentativa((n) => n + 1);
     } catch (error) {
@@ -405,14 +418,10 @@ export default function ProdutosPage() {
   function imagem(p: Produto) {
     const url = p.foto_miniatura || p.foto_produto;
     return url ? (
-      <img
-        className="product-photo"
-        src={url}
-        alt={p.descricao_produto}
-        width={56}
-        height={56}
-        loading="lazy"
-        decoding="async"
+      <PhotoViewer
+        src={p.foto_produto || url}
+        thumbnail={url}
+        name={p.descricao_produto}
       />
     ) : (
       <span
@@ -489,17 +498,58 @@ export default function ProdutosPage() {
               Tentar novamente
             </button>
           </div>
-        ) : aviso ? (
-          <div
-            role="status"
-            className={`notice ${avisoAtencao ? "notice-warning" : "notice-success"}`}
-          >
-            <Icon name="check" />
-            {aviso}
-          </div>
-        ) : null}
+        ) : (
+          <SlowFeedback
+            active={carregando || mutando || saindo}
+            message={
+              saindo
+                ? "Encerrando sessão…"
+                : lote
+                  ? `${lote === "excluir" ? "Excluindo" : "Atualizando"} ${quantidade} produtos…`
+                  : mutando
+                    ? "Atualizando produto…"
+                    : "Carregando produtos…"
+            }
+          />
+        )}
       </div>
       <section className="catalog-panel" aria-label="Catálogo de produtos">
+        <div className="filter-row">
+          <div
+            className="status-filters"
+            role="group"
+            aria-label="Filtrar catálogo"
+          >
+            {(
+              [
+                ["todos", "Todos", paginaDados.resumo.total],
+                ["ativo", "Ativos", ativos],
+                ["inativo", "Inativos", paginaDados.resumo.inativos],
+              ] as const
+            ).map(([valor, rotulo, total]) => (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={filtro === valor}
+                disabled={mutando || saindo}
+                onClick={() => mudarCriterio(busca, valor)}
+              >
+                {rotulo}
+                <span>{inicial ? "—" : total}</span>
+              </button>
+            ))}
+          </div>
+          {(busca || filtro !== "todos") && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={mutando || saindo}
+              onClick={() => mudarCriterio("", "todos")}
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
         <div className="catalog-toolbar">
           <div className="search-field">
             <Icon name="search" />
@@ -512,19 +562,6 @@ export default function ProdutosPage() {
               onChange={(e) => mudarCriterio(e.target.value, filtro)}
             />
           </div>
-          <label className="compact-field">
-            <span>Status</span>
-            <select
-              aria-label="Filtrar por status"
-              value={filtro}
-              disabled={lote !== null}
-              onChange={(e) => mudarCriterio(busca, e.target.value)}
-            >
-              <option value="todos">Todos</option>
-              <option value="ativo">Ativos</option>
-              <option value="inativo">Inativos</option>
-            </select>
-          </label>
           <label className="compact-field order-field">
             <span>Ordenar por</span>
             <select

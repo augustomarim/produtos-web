@@ -149,3 +149,35 @@ Integre primeiro o backend com consulta paginada e status inteligente e depois
 o web. Durante a atualização, o web aceita o array legado e pagina localmente;
 a paginação no servidor passa a valer quando o backend é atualizado.
 Não há migração nova nesta alteração.
+
+## Melhorias para uso diário
+
+- Avisos de sucesso aparecem sobre a página e desaparecem após 6,5 segundos.
+  Passar o mouse ou focar o aviso pausa a saída. Avisos de falha na limpeza de
+  fotos permanecem até fechar; os erros do formulário e da listagem também
+  não somem automaticamente.
+- **Salvar e cadastrar outro** mantém a tela aberta, limpa os campos e a foto
+  selecionada e posiciona o cursor no código. O botão principal mantém o fluxo
+  de salvar e voltar ao catálogo. Um erro conserva o preenchimento.
+- Filtros rápidos Todos/Ativos/Inativos com contagens do catálogo completo,
+  além da opção Limpar filtros. Busca, paginação e critérios continuam funcionando.
+- Exclusão e remoção de foto usam janelas do próprio site: quantidade,
+  nomes/códigos e confirmação explícita. Cancelar recebe o foco inicial;
+  Escape cancela, o foco fica dentro da janela e volta ao botão de origem.
+- Formulários de produto avisam sobre mudanças não salvas nos links do site.
+  Recarregar/fechar a aba usa o aviso nativo do navegador (que pode exigir
+  interação prévia). Voltar/avançar também é protegido em navegadores com
+  Navigation API cancelável; navegadores sem essa API não oferecem esse
+  bloqueio para mudanças no histórico dentro da mesma página.
+- Clique ou toque na foto para ampliar. O visualizador tem botão Fechar,
+  suporte a Escape e mensagem quando a imagem ampliada não carrega.
+- Código duplicado, campos obrigatórios e validações da API aparecem perto
+  dos campos, com foco no primeiro inválido. Login/cadastro também mostram
+  validações junto aos campos. Dados preenchidos são preservados.
+- Operações mostram contexto (salvar, remover foto, atualizar/excluir lote).
+  Após cinco segundos, há um aviso de demora sem reenviar a operação. O espaço
+  do indicador é reservado para evitar deslocar os botões ao carregar.
+
+Estas melhorias alteram somente o web. Nenhuma migração ou atualização
+adicional do backend é necessária. Testes de navegador usam dados locais
+simulados; não criam nem excluem produtos no serviço publicado.

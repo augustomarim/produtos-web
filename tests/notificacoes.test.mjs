@@ -12,7 +12,7 @@ const js = ts.transpile(
 const m = await import(
   "data:text/javascript;base64," + Buffer.from(js).toString("base64")
 );
-test("criação/exclusão mostram somente a última operação, sem detalhes de edições anteriores", () => {
+test("cada evento mostra sua operação e seus próprios campos", () => {
   for (const [acao, titulo] of [
     ["criado", "Produto criado"],
     ["removido", "Produto removido"],

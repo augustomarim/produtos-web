@@ -28,6 +28,7 @@ export async function encaminharLote(
         method,
         headers: {
           Authorization: authorization,
+        "X-App-Origin": "web",
           "Content-Type": "application/json",
         },
         body: JSON.stringify(body),

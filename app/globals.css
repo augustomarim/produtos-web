@@ -1319,3 +1319,53 @@ a:focus-visible {
   min-height: 40px;
   padding: 0;
 }
+
+.notification-dialog {
+  width: min(680px, calc(100vw - 24px));
+}
+.notification-help,
+.notification-meta {
+  color: var(--text-muted, #607483);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.notification-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.notification-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: grid;
+  gap: 12px;
+}
+.notification-item {
+  padding: 16px;
+  border: 1px solid #dce5ea;
+  border-radius: 12px;
+  background: #fff;
+}
+.notification-item p {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
+.notification-unread {
+  border-left: 4px solid #137c65;
+  background: #f1faf6;
+}
+.notification-heading {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.notification-heading span {
+  font-size: 0.8rem;
+  color: #137c65;
+}
+.notification-error {
+  color: #a52b38;
+}

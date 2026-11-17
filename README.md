@@ -209,32 +209,27 @@ obter/alterar fotos alheias pela API, mas não torna privada uma URL de imagem
 que alguém já conheça. A migração limpa os registros órfãos do banco;
 não apaga automaticamente arquivos antigos do Cloudinary.
 
-## Central de notificações internas
+## Histórico de notificações internas
 
-Na listagem, **Notificações** mostra a quantidade não lida e abre a central.
-Ela informa a última operação de cada produto: criado, editado ou removido,
-nome/código, origem e dia/horário no fuso do dispositivo. Edições mostram somente
-os campos alterados (código, descrição, imagem, ativado/inativado).
+O botão **Notificações** abre o histórico de operações feitas **no mobile**,
+sempre limitado à conta autenticada. Ações feitas no próprio site não aparecem
+na lista, na contagem nem na paginação; elas são destinadas somente ao mobile.
 
-Cada produto tem um único snapshot. Se foi editado e depois excluído, somente a
-exclusão permanece. Uma nova mudança substitui o aviso anterior e volta a ficar
-não lida no cliente de destino. Operações feitas no próprio site aparecem lidas;
-as feitas no aplicativo aparecem não lidas. Cada conta vê apenas seus avisos.
+Cada criação, edição real, mudança de status, alteração de imagem ou exclusão
+tem um aviso independente com dia/horário no fuso do dispositivo. Editar →
+inativar → excluir mantém todos os avisos; uma exclusão não apaga os anteriores.
+Cada evento preserva a identificação do produto e os nomes dos campos alterados,
+sem exibir valores anteriores. Marcar como lida afeta somente os avisos enviados
+na requisição, sem marcar eventos posteriores do mesmo produto.
 
-A leitura é explícita, por item ou página, independente do mobile e protegida pela
-revisão do aviso. A central tem paginação de 50 itens. Atualiza ao abrir, ao voltar
-à aba, após operações locais e a cada 30 segundos enquanto o documento está
-visível. Atualizações remotas também renovam o catálogo sem limpar seus filtros.
-Não é WebSocket nem push: se a aba está fechada, a consulta ocorre ao reabrir.
+O backend filtra a origem e a conta antes de contar/paginar (50 por página).
+A central atualiza ao abrir, voltar à aba e a cada 30 segundos enquanto visível.
+Atualizações remotas renovam o catálogo preservando seus filtros. O BFF usa
+`API_URL`, Bearer e fixa `X-App-Origin: web`; não aceita identidade/origem do
+navegador como autorização. Não há push nem dependências novas.
 
-O BFF usa `API_URL`, encaminha o Bearer e fixa `X-App-Origin: web`. Não encaminha
-origem/usuário fornecidos pelo navegador. Novos arquivos principais:
-
-- `src/components/Notificacoes.tsx`: central, contagem e leitura.
-- `src/lib/notificacoes.ts`: tipos e textos de apresentação.
-- `src/lib/proxy-notificacoes.ts`, `app/api/notificacoes/`: proxy autenticado.
-
-Integre **primeiro o backend** da branch `codex/notificacoes` e aplique a migração
-`20261117000000_notificacoes` no Render. Depois integre esta branch em `master` e
-faça o deploy normal na Vercel. Sem novas variáveis de ambiente ou dependências.
-Os testes desta mudança usam banco/API local ou mocks, sem dados publicados.
+Atualize primeiro o backend pela branch `codex/historico-notificacoes`, aplicando
+`npx prisma migrate deploy` no ambiente do Render antes de iniciar a versão nova.
+Depois integre esta branch em `master` e faça o deploy normal na Vercel. A migração
+preserva avisos existentes, mas não recupera edições já sobrescritas pela versão
+anterior. O histórico completo passa a ser acumulado a partir desta atualização.

@@ -12,11 +12,11 @@ const inicial = {
   ocorreuEm: "2026-11-17T15:30:00Z",
   lida: false,
 };
-test("central mostra detalhes, mantém não lida em falha e não marca revisão nova com confirmação antiga", async ({
+test("histórico mantém edições após exclusão e leitura não marca o evento novo", async ({
   page,
 }) => {
   await preparar(page);
-  let evento = { ...inicial };
+  let eventos = [{ ...inicial }];
   let falhar = true;
   const enviados: unknown[] = [];
   await page.route("**/api/notificacoes**", async (route) => {
@@ -29,14 +29,17 @@ test("central mostra detalhes, mantém não lida em falha e não marca revisão 
           json: { error: "Falha simulada de leitura" },
         });
       }
-      evento = { ...evento, revisao: 3, acao: "removido", campos: [] };
-      return route.fulfill({ json: { afetadas: 0 } });
+      eventos = [
+        { ...inicial, id: 2, revisao: 1, acao: "removido", campos: [] },
+        { ...inicial, lida: true },
+      ];
+      return route.fulfill({ json: { afetadas: 1 } });
     }
     return route.fulfill({
       json: {
-        notificacoes: [evento],
+        notificacoes: eventos,
         naoLidas: 1,
-        total: 1,
+        total: eventos.length,
         pagina: 1,
         paginas: 1,
       },
@@ -65,7 +68,11 @@ test("central mostra detalhes, mantém não lida em falha e não marca revisão 
     dialog.getByText("Produto removido", { exact: true }),
   ).toBeVisible();
   await expect(dialog.getByText("Não lida", { exact: true })).toBeVisible();
-  await expect(dialog.getByText(/Alterações:/)).toHaveCount(0);
+  await expect(
+    dialog.getByText("Alterações: descrição, imagem.", { exact: true }),
+  ).toBeVisible();
+  await expect(dialog.getByText("Lida", { exact: true })).toBeVisible();
+  await expect(dialog.locator("li")).toHaveCount(2);
   expect(enviados).toEqual([
     { notificacoes: [{ id: 1, revisao: 2 }] },
     { notificacoes: [{ id: 1, revisao: 2 }] },

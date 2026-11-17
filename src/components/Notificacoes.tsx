@@ -139,8 +139,8 @@ export default function Notificacoes() {
           className="notification-dialog"
         >
           <p className="notification-help">
-            Última operação de cada produto. Alterações feitas no aplicativo
-            aparecem aqui.
+            Histórico das operações feitas no aplicativo. As ações feitas neste
+            site aparecem somente no mobile.
           </p>
           <div className="notification-actions">
             <button

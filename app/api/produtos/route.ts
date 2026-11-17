@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
     const resposta = await fetch(destino, {
       headers: {
         Authorization: authorization,
+        "X-App-Origin": "web",
       },
       cache: "no-store",
       signal: AbortSignal.timeout(60_000),
@@ -83,6 +84,7 @@ export async function POST(request: NextRequest) {
       method: "POST",
       headers: {
         Authorization: authorization,
+        "X-App-Origin": "web",
       },
       body: formulario,
       cache: "no-store",

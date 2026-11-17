@@ -45,7 +45,11 @@ export async function apiAutenticada<T>(
   }
   if (resposta.status === 401)
     throw new SessaoExpiradaError("Entre novamente.");
-  if (resposta.status === 204) return undefined as T;
+  if (resposta.status === 204) {
+    if (path.startsWith("/api/produtos"))
+      window.dispatchEvent(new Event("produtos-alterados"));
+    return undefined as T;
+  }
   const dados = await resposta.json().catch(() => ({}));
   verificar();
   if (!resposta.ok) {
@@ -58,5 +62,11 @@ export async function apiAutenticada<T>(
       Array.isArray(dados.details) ? dados.details : [],
     );
   }
+  if (
+    path.startsWith("/api/produtos") &&
+    options.method &&
+    options.method !== "GET"
+  )
+    window.dispatchEvent(new Event("produtos-alterados"));
   return dados as T;
 }

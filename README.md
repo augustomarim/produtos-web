@@ -208,3 +208,33 @@ As fotos continuam usando URLs públicas do Cloudinary. O isolamento impede
 obter/alterar fotos alheias pela API, mas não torna privada uma URL de imagem
 que alguém já conheça. A migração limpa os registros órfãos do banco;
 não apaga automaticamente arquivos antigos do Cloudinary.
+
+## Central de notificações internas
+
+Na listagem, **Notificações** mostra a quantidade não lida e abre a central.
+Ela informa a última operação de cada produto: criado, editado ou removido,
+nome/código, origem e dia/horário no fuso do dispositivo. Edições mostram somente
+os campos alterados (código, descrição, imagem, ativado/inativado).
+
+Cada produto tem um único snapshot. Se foi editado e depois excluído, somente a
+exclusão permanece. Uma nova mudança substitui o aviso anterior e volta a ficar
+não lida no cliente de destino. Operações feitas no próprio site aparecem lidas;
+as feitas no aplicativo aparecem não lidas. Cada conta vê apenas seus avisos.
+
+A leitura é explícita, por item ou página, independente do mobile e protegida pela
+revisão do aviso. A central tem paginação de 50 itens. Atualiza ao abrir, ao voltar
+à aba, após operações locais e a cada 30 segundos enquanto o documento está
+visível. Atualizações remotas também renovam o catálogo sem limpar seus filtros.
+Não é WebSocket nem push: se a aba está fechada, a consulta ocorre ao reabrir.
+
+O BFF usa `API_URL`, encaminha o Bearer e fixa `X-App-Origin: web`. Não encaminha
+origem/usuário fornecidos pelo navegador. Novos arquivos principais:
+
+- `src/components/Notificacoes.tsx`: central, contagem e leitura.
+- `src/lib/notificacoes.ts`: tipos e textos de apresentação.
+- `src/lib/proxy-notificacoes.ts`, `app/api/notificacoes/`: proxy autenticado.
+
+Integre **primeiro o backend** da branch `codex/notificacoes` e aplique a migração
+`20261117000000_notificacoes` no Render. Depois integre esta branch em `master` e
+faça o deploy normal na Vercel. Sem novas variáveis de ambiente ou dependências.
+Os testes desta mudança usam banco/API local ou mocks, sem dados publicados.

@@ -98,6 +98,7 @@ export async function preparar(
     }
     if (!loggedIn)
       return route.fulfill({ status: 401, json: { error: "Sem sessão" } });
+    if (path === "/api/notificacoes") return route.fulfill({json:{notificacoes:[],naoLidas:0,total:0,pagina:1,paginas:1}});
     if (path === "/api/produtos" && method === "GET") {
       if (rejeitarProximaConsulta) {
         rejeitarProximaConsulta = false;

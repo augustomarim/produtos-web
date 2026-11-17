@@ -42,6 +42,7 @@ export async function PATCH(
         method: "PATCH",
         headers: {
           Authorization: authorization,
+        "X-App-Origin": "web",
         },
         cache: "no-store",
         signal: AbortSignal.timeout(60_000),

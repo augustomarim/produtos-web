@@ -23,6 +23,7 @@ import {
   PhotoViewer,
   SlowFeedback,
 } from "../../src/components/Experience";
+import Notificacoes from "../../src/components/Notificacoes";
 import Checkbox from "../../src/components/Checkbox";
 import {
   restringirSelecao,
@@ -81,6 +82,24 @@ export default function ProdutosPage() {
   const mutando = Object.keys(pendentes).length > 0 || lote !== null;
   const navegacaoBloqueada = saindo || mutando;
 
+  useEffect(() => {
+    const atualizarAoVoltar = () => {
+      if (
+        preferenciasProntas &&
+        !navegacaoBloqueada &&
+        document.visibilityState === "visible"
+      )
+        setTentativa((atual) => atual + 1);
+    };
+    window.addEventListener("focus", atualizarAoVoltar);
+    window.addEventListener("catalogo-remoto-alterado", atualizarAoVoltar);
+    document.addEventListener("visibilitychange", atualizarAoVoltar);
+    return () => {
+      window.removeEventListener("focus", atualizarAoVoltar);
+      window.removeEventListener("catalogo-remoto-alterado", atualizarAoVoltar);
+      document.removeEventListener("visibilitychange", atualizarAoVoltar);
+    };
+  }, [preferenciasProntas, navegacaoBloqueada]);
   useEffect(() => {
     let ativo = true;
     void Promise.resolve().then(() => {
@@ -451,6 +470,7 @@ export default function ProdutosPage() {
           <p className="muted">Seu catálogo é exclusivo da sua conta.</p>
         </div>
         <div className="page-actions">
+          <Notificacoes />
           <button
             className="button button-secondary"
             onClick={() => void sair()}

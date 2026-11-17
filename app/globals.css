@@ -1369,3 +1369,112 @@ a:focus-visible {
 .notification-error {
   color: #a52b38;
 }
+.realtime-control {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 32px;
+  background: #eef8f3;
+  color: #42645a;
+  font-size: 12px;
+}
+.realtime-control button {
+  border: 0;
+  background: transparent;
+  color: #137c65;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 5px;
+}
+.connection-dot {
+  height: 8px;
+  width: 8px;
+  border-radius: 50%;
+  background: #c59847;
+}
+.connection-dot.connected {
+  background: #16855f;
+}
+.notification-bell {
+  position: relative;
+}
+.notification-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border-radius: 50px;
+  background: #d33045;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+.notification-bubbles {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 500;
+  display: grid;
+  gap: 10px;
+  max-width: calc(100vw - 32px);
+  width: 360px;
+  pointer-events: none;
+}
+.notification-bubble {
+  pointer-events: auto;
+  background: white;
+  border: 1px solid #c4ddd2;
+  border-left: 4px solid #16855f;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 8px 32px #142e2730;
+  animation: bubble-in 0.2s ease-out;
+}
+.notification-bubble > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.notification-bubble button {
+  border: 0;
+  background: transparent;
+  min-width: 36px;
+  min-height: 36px;
+  font-size: 24px;
+  cursor: pointer;
+}
+.notification-bubble p {
+  margin: 8px 0;
+  color: #283e36;
+  overflow-wrap: anywhere;
+}
+.notification-bubble small {
+  color: #607483;
+}
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.notification-bubble p {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

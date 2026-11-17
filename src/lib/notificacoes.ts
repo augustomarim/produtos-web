@@ -52,3 +52,27 @@ export function dataNotificacao(data: string) {
     minute: "2-digit",
   });
 }
+
+export function eventosParaAlertar(
+  eventos: Notificacao[],
+  plataforma: "web" | "mobile",
+) {
+  const oposta = plataforma === "web" ? "mobile" : "web";
+  return eventos.filter((n) => n.origem === oposta);
+}
+export function tituloAviso(eventos: Notificacao[]) {
+  const n = eventos[0];
+  if (!n) return "";
+  if (eventos.length === 1) return tituloNotificacao(n);
+  const operacao =
+    n.acao === "criado"
+      ? "criados"
+      : n.acao === "removido"
+        ? "removidos"
+        : n.campos.includes("ativado")
+          ? "ativados"
+          : n.campos.includes("inativado")
+            ? "inativados"
+            : "editados";
+  return `${eventos.length} produtos ${operacao}`;
+}

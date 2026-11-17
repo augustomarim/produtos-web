@@ -1,5 +1,6 @@
 import { GuardedLink as Link } from "./Feedback";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
+import NotificacoesMenu from "./NotificacoesMenu";
 
 export function Icon({
   name,
@@ -102,7 +103,12 @@ export function Header() {
             <span className="brand-caption">SEU CATÁLOGO, ORGANIZADO</span>
           </span>
         </Link>
-        <span className="header-label">Gestão de catálogo</span>
+        <div className="header-tools">
+          <span className="header-label">Gestão de catálogo</span>
+          <Suspense fallback={null}>
+            <NotificacoesMenu />
+          </Suspense>
+        </div>
       </div>
     </header>
   );

@@ -209,27 +209,33 @@ obter/alterar fotos alheias pela API, mas não torna privada uma URL de imagem
 que alguém já conheça. A migração limpa os registros órfãos do banco;
 não apaga automaticamente arquivos antigos do Cloudinary.
 
-## Histórico de notificações internas
+## Notificações em tempo real: histórico, sino, bubble e som
 
-O botão **Notificações** abre o histórico de operações feitas **no mobile**,
-sempre limitado à conta autenticada. Ações feitas no próprio site não aparecem
-na lista, na contagem nem na paginação; elas são destinadas somente ao mobile.
+O sino no cabeçalho está disponível na listagem, criação e edição. A central
+mostra todas as operações da conta, feitas no site ou no mobile, com campos,
+origem, dia/horário local e leitura. Uma operação não substitui a anterior.
 
-Cada criação, edição real, mudança de status, alteração de imagem ou exclusão
-tem um aviso independente com dia/horário no fuso do dispositivo. Editar →
-inativar → excluir mantém todos os avisos; uma exclusão não apaga os anteriores.
-Cada evento preserva a identificação do produto e os nomes dos campos alterados,
-sem exibir valores anteriores. Marcar como lida afeta somente os avisos enviados
-na requisição, sem marcar eventos posteriores do mesmo produto.
+Ações feitas no próprio web entram lidas no histórico. Somente ações vindas
+do mobile aumentam o contador vermelho e geram bubble flutuante e som.
+Bubbles podem ser fechadas e desaparecem após 10 segundos; o histórico permanece.
+Lotes têm uma bubble de resumo e um som, sem perder os eventos individuais.
 
-O backend filtra a origem e a conta antes de contar/paginar (50 por página).
-A central atualiza ao abrir, voltar à aba e a cada 30 segundos enquanto visível.
-Atualizações remotas renovam o catálogo preservando seus filtros. O BFF usa
-`API_URL`, Bearer e fixa `X-App-Origin: web`; não aceita identidade/origem do
-navegador como autorização. Não há push nem dependências novas.
+A conexão WebSocket/Socket.IO fica ativa em todas as telas de produtos.
+Quando chega um evento, histórico, contador e catálogo atualizam sem refresh,
+preservando os filtros. Formulários em edição não são sobrescritos por eventos.
+A interface informa Em tempo real/Reconectando e reconecta automaticamente.
+Na reconexão, sincroniza os dados que podem ter mudado durante a interrupção.
 
-Atualize primeiro o backend pela branch `codex/historico-notificacoes`, aplicando
-`npx prisma migrate deploy` no ambiente do Render antes de iniciar a versão nova.
-Depois integre esta branch em `master` e faça o deploy normal na Vercel. A migração
-preserva avisos existentes, mas não recupera edições já sobrescritas pela versão
-anterior. O histórico completo passa a ser acumulado a partir desta atualização.
+O navegador exige interação para liberar áudio: use **Ativar som** se aparecer.
+É possível silenciar sem desligar contador/bubbles. O som usa Web Audio e não
+pede acesso a microfone. Fechar a aba encerra a conexão; não é push do navegador.
+
+O BFF `/api/notificacoes/conexao` usa a sessão atual para obter um ticket curto,
+e informa o socket público configurado em `API_URL`. O navegador conecta direto
+ao Render; não mantém websocket em função da Vercel. Ticket não vai na URL nem
+é persistido. Não há variável nova: API_URL deve ser a URL pública HTTPS.
+
+Atualize primeiro `codex/notificacoes-tempo-real` do backend e depois esta branch
+em master. Execute `npm ci` para instalar socket.io-client. Esta etapa não cria
+migração nova; as migrações de notificações/histórico anteriores devem estar
+aplicadas. Testes usam banco local/mocks, sem registros publicados.

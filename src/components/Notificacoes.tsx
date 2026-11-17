@@ -78,20 +78,27 @@ export default function Notificacoes() {
   useEffect(() => {
     vivo.current = true;
     void Promise.resolve().then(atualizar);
+    const realtime = () => {
+      pedido.current?.abort();
+      pedido.current = null;
+      void atualizar();
+    };
     const voltar = () => {
       if (document.visibilityState === "visible") void atualizar();
     };
-    const timer = setInterval(voltar, 30000);
+
     window.addEventListener("focus", voltar);
     window.addEventListener("produtos-alterados", voltar);
+    window.addEventListener("notificacoes-atualizar", realtime);
     document.addEventListener("visibilitychange", voltar);
     return () => {
       vivo.current = false;
       pedido.current?.abort();
       pedido.current = null;
-      clearInterval(timer);
+
       window.removeEventListener("focus", voltar);
       window.removeEventListener("produtos-alterados", voltar);
+      window.removeEventListener("notificacoes-atualizar", realtime);
       document.removeEventListener("visibilitychange", voltar);
     };
   }, [atualizar]);
@@ -122,15 +129,34 @@ export default function Notificacoes() {
   return (
     <>
       <button
-        className="button button-secondary"
+        className="button button-secondary notification-bell"
         onClick={() => {
           setAberta(true);
           void atualizar();
         }}
         aria-label={`Notificações${dados?.naoLidas ? `, ${dados.naoLidas} não lidas` : ""}`}
       >
+        <svg
+          aria-hidden="true"
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        >
+          <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+        </svg>{" "}
         Notificações{" "}
-        {dados?.naoLidas ? `(${dados.naoLidas})` : erro ? "· !" : ""}
+        {dados?.naoLidas ? (
+          <span className="notification-count">
+            {dados.naoLidas > 99 ? "99+" : dados.naoLidas}
+          </span>
+        ) : erro ? (
+          "· !"
+        ) : (
+          ""
+        )}
       </button>
       {aberta && (
         <Modal
@@ -139,8 +165,8 @@ export default function Notificacoes() {
           className="notification-dialog"
         >
           <p className="notification-help">
-            Histórico das operações feitas no aplicativo. As ações feitas neste
-            site aparecem somente no mobile.
+            Histórico completo do site e do aplicativo. Som e avisos flutuantes
+            são exibidos somente para ações feitas no aplicativo.
           </p>
           <div className="notification-actions">
             <button

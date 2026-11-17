@@ -40,3 +40,35 @@ test("origem distingue site, aplicativo e API", () => {
   assert.equal(m.origemNotificacao({ origem: "mobile" }), "Pelo aplicativo");
   assert.equal(m.origemNotificacao({ origem: "api" }), "Pela API");
 });
+test("histórico pode conter ambas as origens mas alertas são somente da oposta", () => {
+  const eventos = [
+    { id: 1, origem: "web" },
+    { id: 2, origem: "mobile" },
+    { id: 3, origem: "api" },
+  ];
+  assert.deepEqual(
+    m.eventosParaAlertar(eventos, "web").map((n) => n.id),
+    [2],
+  );
+  assert.deepEqual(
+    m.eventosParaAlertar(eventos, "mobile").map((n) => n.id),
+    [1],
+  );
+  assert.equal(eventos.length, 3);
+});
+test("um lote tem aviso único com a operação correta", () => {
+  assert.equal(
+    m.tituloAviso([
+      { acao: "removido", campos: [] },
+      { acao: "removido", campos: [] },
+    ]),
+    "2 produtos removidos",
+  );
+  assert.equal(
+    m.tituloAviso([
+      { acao: "editado", campos: ["inativado"] },
+      { acao: "editado", campos: ["inativado"] },
+    ]),
+    "2 produtos inativados",
+  );
+});

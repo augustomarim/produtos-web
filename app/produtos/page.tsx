@@ -23,7 +23,6 @@ import {
   PhotoViewer,
   SlowFeedback,
 } from "../../src/components/Experience";
-import Notificacoes from "../../src/components/Notificacoes";
 import Checkbox from "../../src/components/Checkbox";
 import {
   restringirSelecao,
@@ -470,7 +469,6 @@ export default function ProdutosPage() {
           <p className="muted">Seu catálogo é exclusivo da sua conta.</p>
         </div>
         <div className="page-actions">
-          <Notificacoes />
           <button
             className="button button-secondary"
             onClick={() => void sair()}

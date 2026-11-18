@@ -113,12 +113,15 @@ export default function ProdutosPage() {
       ativo = false;
     };
   }, []);
+  const ultimaBusca = useRef(busca);
   useEffect(() => {
     if (!preferenciasProntas) return;
+    const atraso = ultimaBusca.current === busca ? 0 : 200;
     let ativo = true;
     const controller = new AbortController();
     const consulta = { busca, filtro, ordem, pagina, limite };
     const timer = setTimeout(() => {
+      ultimaBusca.current = busca;
       setCarregando(true);
       void apiAutenticada<PaginaProdutos | Produto[]>(
         `/api/produtos?${queryCatalogo(consulta)}`,
@@ -151,7 +154,7 @@ export default function ProdutosPage() {
         .finally(() => {
           if (ativo) setCarregando(false);
         });
-    }, 200);
+    }, atraso);
     return () => {
       ativo = false;
       clearTimeout(timer);

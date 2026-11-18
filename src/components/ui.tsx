@@ -1,5 +1,6 @@
 import { GuardedLink as Link } from "./Feedback";
 import { Suspense, type ReactNode } from "react";
+import TemaBotao from "./TemaBotao";
 import NotificacoesMenu from "./NotificacoesMenu";
 
 export function Icon({
@@ -105,6 +106,7 @@ export function Header() {
         </Link>
         <div className="header-tools">
           <span className="header-label">Gestão de catálogo</span>
+          <TemaBotao />
           <Suspense fallback={null}>
             <NotificacoesMenu />
           </Suspense>
